@@ -1,0 +1,165 @@
+---
+title: "UnsupervisedLearning"
+author: "bhaskar"
+output: html_document
+---
+
+## PRINCIPAL COMPONENT ANALYSIS a.k.a PCA
+
+Low dimensional representation of the feature space that contains as much as possible of the variation.
+
+The n observations lives in p dimensionsions, but not all the dimensions are equally interesting, PCA seeks small number of dimensions that are as interesting as possible (Interseting = amount that observations vary along each dimension).
+
+each principal component is a linear combination of feature space, loading vector of first PCA defines direction in which data varies most.
+
+Of all the possible linear combination of features that are uncorrelated with first PCA , the one in which data varies the most is second PCA.
+
+Results of PCA change if measurement unit of a single predictor is adjusted, hence using default of centering and scaling and deviating only when all the predictors are measured on the same scale makes useful principal components.
+
+**Principal components on *USArrests* data**
+```{r}
+library(dplyr)
+names(USArrests)
+USArrest = tbl_df(USArrests)
+glimpse(USArrest)
+USArrest %>% rownames()
+USArrest %>% summarise_each(funs(mean))
+USArrest %>% summarise_each(funs(var))
+```
+As variances are different Principal components will be dominated by Highest varying column variance
+```{r}
+pr.out.unscaled = prcomp(USArrest)
+pr.out.unscaled$center
+pr.out.unscaled$scale
+pr.out.unscaled$rotation
+pr.out.unscaled$x %>% dim()
+biplot(pr.out.unscaled,scale = 0,pc.biplot = T)
+# multipl
+pr.out.unscaled$rotation = - pr.out.unscaled$rotation
+pr.out.unscaled$x = - pr.out.unscaled$x
+biplot(pr.out.unscaled,scale = 0)
+```
+column *'x'* in the output is the scores, *'rotation'* is the loadings, *'scale = 0'* in biplot makes the length of arrow equal to loadings.
+
+```{r}
+pr.out = prcomp(USArrest,scale. = T)
+pr.out$center
+pr.out$scale
+pr.out$rotation
+pr.out$x %>% dim()
+biplot(pr.out,scale = 0,xlabs=rep("0",nrow(USArrest)))
+biplot(pr.out.unscaled,scale = 0,xlabs=rep(".",nrow(USArrest)))
+pr.out$rotation = - pr.out$rotation
+pr.out$x = - pr.out$x
+biplot(pr.out,scale = 0,xlabs=rep("0",nrow(USArrest)))
+pr.out$sdev
+pr.var = pr.out$sdev^2
+pr.var
+pve = pr.var/sum(pr.var)
+plot(pve,type = "b")
+plot(cumsum(pve),type = "b")
+```
+
+## CLUSTERING METHODS
+
+Techniques to find subgroups or clusters in data.
+
+To perform clustering we need to define what it means for two or more observations to be **similar** or **different**. This is often defined using *domain specific considerations* or based on the knowledge of *data* being studied.
+
+We can find clusters in observations based on features or vice versa.
+
+### K-Means clustering
+
+classifying the observations into predefined number of clusters such that they are unique and non overlapping. 
+
+we want to partition the observation into K clusters such that total within cluster variations, summed over all K clusters is as small as possible.
+
+Default choice used for within cluster variance definition is the squared Euclidean distance,other popular choice is correlation
+
+To solve precisely there are K^n ways to partition n observations into k clusters, hense local optimisation is preferred for computational feasibility.
+
+Local optimisation involves random initialisation to k clusters and looping through assigning observation to closest centroid, to rectify solving for local maximum we run the above step with multiple random initialisation and selecting best based on global solution criteria
+
+Disadvantage of K-Means is to specify the number of clusters beforehand
+
+```{r}
+set.seed(2)
+x = matrix(rnorm(50*2),ncol = 2)
+plot(x)
+x[1:25,1]=x[1:25,1]+3
+x[1:25,2] = x[1:25,2]-4
+plot(x)
+km.out=kmeans(x,2,nstart = 20)
+km.out
+km.out$cluster
+plot(x,col=(km.out$cluster+1),mains="K-Means Clustering with k=2",xlab = "",ylab = "",pch=20,cex=2)
+km.out3 = kmeans(x,3,nstart = 20)
+plot(x,col=(km.out3$cluster+1),mains="K-Means Clustering with k=2",xlab = "",ylab = "",pch=20,cex=2)
+```
+
+### Hierarchial clustering
+
+Need not specify number of clusters beforehand, it builds a dendogram with all the observations at the bottem and fusing them hierarchially based on the choise of similarity and we can cut the dendogram at some height to get clusters in the observations.
+
+Hierarchial clustering involves starting with individual clusters per observation and looping over finding pairwise dissimilarities among i clusters and fuse the clusters which are similar. To calculate inter cluster dissimilarity we calculate pairwise inter cluster dissimilarity between elements in both clusters and use either largest (known as **central linkage**), smallest (**single linkage**), mean (**average linkage**). Dissimilarity between the centroids (**centroid linkage**) of the two clusters is used in genomics but can result in undesirable inversions(height of clusters fusion < height of clusters)
+
+Dendogram is built by height of the fusion from the bottom as the measure of dissimilarity and horizontal distance holding no significance.
+
+```{r}
+hclust.complete = hclust(dist(x),method = "complete")
+plot(hclust.complete,main = "Hierarrchial clustering with complete linkage",xlab = "",sub = "",cex=0.9)
+hclust.single = hclust(dist(x),method = "single")
+plot(hclust.single,main = "Hierarrchial clustering with single linkage",xlab = "",sub = "",cex=0.9)
+hclust.average = hclust(dist(x),method = "average")
+plot(hclust.average,main = "Hierarrchial clustering with average linkage",xlab = "",sub = "",cex=0.9)
+```
+single linkage results in a single observation for a cluster
+```{r}
+cutree(hclust.single,4)
+```
+still two singletons with single linkage, average and complete linkage doesn't suffer from these
+```{r}
+cutree(hclust.average,2)
+cutree(hclust.complete,2)
+```
+scaling before cluster
+```{r}
+xsc = scale(x)
+hclust.scaled = hclust(dist(x),method="complete")
+plot(hclust.scaled,main="Hierarchial clustering with scaled variables",xlab = "",sub = "",cex=0.9)
+```
+
+**Using correlation based distances**
+```{r}
+x= matrix(rnorm(30*3),ncol = 3)
+distMatrix = as.dist(1-cor(t(x)))
+hclust.correlation = hclust(distMatrix,method = "complete")
+plot(hclust.correlation,main="Hierarchial for 3 dimensions and correlation",xlab = "",sub = "",cex = 0.9)
+```
+
+
+Some data might not satisfy hierarchial assumptions in such cases K-Means perform better.
+**simulation**
+```{r}
+x=rep(1:4,25)
+y=rep(1:2,50)
+DataSet = cbind(x,y,rnorm(100,2,4),rpois(100,0.1))
+library(dplyr)
+library(ggplot2)
+str(DataSet)
+DataSet = as.data.frame(DataSet)
+p=DataSet %>% group_by(x) %>%tally()
+p
+q=DataSet %>% group_by(y) %>% summarise(count = n())
+q
+ggplot(p,aes(x))+geom_histogram(bins = 8)
+```
+The above DataSet can have 2 clusters based on x, 4 clusters based on y , but as they are not hierarchial K-means clustering with k=2 or 4 performs better than hierarchial
+
+
+### Practical issues in clustering
+
+1. For clustering using any method it needs a choice of dissimilarity and decision on centering and scaling of the features, additionally K-Means requires number of clusters beforehand and hierarchial needs type of linkage and height at which dendogram is cut.
+2. whether the clusters are valid or are they a result of clustering noise?
+3. Both algorithms assign each observation into clusters, what if even though most of the observations belong to small number of subgroups and a small group is different from each other and all other groups? forcing each observations into clusters might make the clusters heavily distorted due to outliers, not very robust to pertubation of data( different clusters in a subset)
+       
