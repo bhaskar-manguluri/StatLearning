@@ -1,0 +1,106 @@
+---
+title: "ResamplingMethods"
+author: "bhaskar"
+output: html_document
+---
+
+### The Validation Set Approach
+
+using validation set approach to estimate test error from fitting linear model on *AUTO* data
+```{r}
+library(ISLR)
+library(dplyr)
+set.seed(1)
+train = sample(392,196)
+lm.fit = lm(mpg~horsepower,data = Auto,subset = train)
+attach(Auto)
+mean((mpg - predict(lm.fit,Auto))[-train]^2)
+##mean((Auto[-train,]$mpg - predict(lm.fit,Auto[-train,]))^2)
+lmfit1 = lm(mpg~poly(horsepower,2),data = Auto,subset = train)
+mean((mpg - predict(lmfit1,Auto))[-train]^2)
+lmfit2 = lm(mpg~poly(horsepower,3),data = Auto,subset = train)
+mean((mpg - predict(lmfit2,Auto))[-train]^2)
+# *cubic model performed slightly bettter than quadratic*
+# **using another seed , the change in validation error due to different training sample
+set.seed(2)
+train = sample(392,196)
+lm.fit = lm(mpg~horsepower,data = Auto,subset = train)
+attach(Auto)
+mean((mpg - predict(lm.fit,Auto))[-train]^2)
+##mean((Auto[-train,]$mpg - predict(lm.fit,Auto[-train,]))^2)
+lmfit1 = lm(mpg~poly(horsepower,2),data = Auto,subset = train)
+mean((mpg - predict(lmfit1,Auto))[-train]^2)
+lmfit2 = lm(mpg~poly(horsepower,3),data = Auto,subset = train)
+mean((mpg - predict(lmfit2,Auto))[-train]^2)
+# now the quadratic model performed better
+```
+
+### Leave One Out Cross Validation
+```{r}
+library(boot)
+glm.fit = glm(mpg~horsepower,data = Auto)
+coef(glm.fit)
+coef(lm(mpg~horsepower,data = Auto))
+cv.err = cv.glm(Auto,glm.fit)
+cv.err$delta
+cv.error = rep(0,5)
+for(i in 1:5) {
+        glm.fit = glm(mpg~poly(horsepower,i),data = Auto)
+        cv.error[i] = cv.glm(data = Auto,glmfit = glm.fit)$delta[2]
+}
+plot(cv.error,type = "b")
+```
+we can see a sharp improvement from linear to quadratic and not much from then.
+
+### K_FOLD Cross Validation
+
+```{r}
+set.seed(17)
+cv.error10 = rep(0,10)
+for(i in 1:10) {
+        glm.fit = glm(mpg~poly(horsepower,i),data = Auto)
+        cv.error10[i] = cv.glm(data = Auto,glmfit = glm.fit)$delta[2]
+}
+plot(cv.error10,type = "b")
+```
+
+### Bootstrapping
+
+can be used in almost all the situations
+```{r}
+# fuunction which calculates statistic of interest given sample
+alpha.fn = function(data,index){
+        X = data$X[index]
+        Y = data$Y[index]
+        return((var(Y)-cov(X,Y))/(var(X)+var(Y)-2*cov(X,Y)))
+}
+
+# function that produces bootstrapped samples
+sample(8,8,replace = T)
+
+# estimate on bootstrapped sample
+alpha.fn(Portfolio,sample(100,100,replace = T))
+
+## bootstrtap analysis
+bootSampleEstimates = rep(0,100)
+for(i in 1:100){
+        set.seed(i)
+        bootSampleEstimates[i] = alpha.fn(Portfolio,sample(100,100,replace = T))
+}
+mean(bootSampleEstimates)
+
+## using boot() function from *boot* package
+boot(Portfolio,alpha.fn,1000)
+```
+
+Estimating accuracy of linear model
+```{r}
+boot.fn = function(data,index){
+        return(coef(lm(mpg~horsepower,data=Auto,subset = index)))
+}
+boot.fn(data = Auto,index = 1:392)
+boot(data = Auto,statistic = boot.fn,R = 1000)
+summary(lm(mpg~horsepower,data = Auto))$coef
+```
+Different estimate using lm and bootstrap
+lm estimate calculates Standard error by estimating unknown noise variance from RSS, hence bootstrap works better even if linear assumptions doe not satisy

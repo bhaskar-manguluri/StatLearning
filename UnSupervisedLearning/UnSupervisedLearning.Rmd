@@ -162,4 +162,71 @@ The above DataSet can have 2 clusters based on x, 4 clusters based on y , but as
 1. For clustering using any method it needs a choice of dissimilarity and decision on centering and scaling of the features, additionally K-Means requires number of clusters beforehand and hierarchial needs type of linkage and height at which dendogram is cut.
 2. whether the clusters are valid or are they a result of clustering noise?
 3. Both algorithms assign each observation into clusters, what if even though most of the observations belong to small number of subgroups and a small group is different from each other and all other groups? forcing each observations into clusters might make the clusters heavily distorted due to outliers, not very robust to pertubation of data( different clusters in a subset)
-       
+
+## NC160 Data Example
+
+NCI60 cancer cell line microarray data,consists of 6830 gene expression measurements on 64 cancer cell lines. Data is from *'ISLR'* package, each cell line is labelled with cancer type which is removed while performing clustering and used for checking the results
+```{r}
+library(ISLR)
+str(NCI60)
+str(NCI60$data)
+rownames(NCI60$data)
+# using data for unsupervised learning and labs for verification of results
+ncdata = tbl_df(NCI60$data)
+NCI60$labs %>% table()
+nci.labs = NCI60$labs
+#names(ncdata)
+#PCA
+prncdata = prcomp(dist(ncdata))
+prncdata.scaled = prcomp(dist(ncdata),scale. = T)
+biplot(prncdata)
+Cols = function(vec) {
+        cols = rainbow(length(unique(vec)))
+        return(cols[as.numeric(as.factor(vec))])
+}
+prncdata
+prncdata.summary = summary(prncdata)
+prncdata.scaled.summary = summary(prncdata.scaled)
+plot(prncdata$x[,1:2],col=Cols(nci.labs),pch=19,xlab = "Z1",ylab = "Z2",main="Unscaled ncdata bi plot")
+plot(prncdata.scaled$x[,1:2],col=Cols(nci.labs),pch=19,xlab = "Z1",ylab = "Z2",main="scaled ncdata bi plot")
+plot(prncdata$x[,1:3],col=Cols(nci.labs),pch=19,xlab = "Z1",ylab = "Z3",main="Unscaled ncdata bi plot")
+plot(prncdata.scaled$x[,1:3],col=Cols(nci.labs),pch=19,xlab = "Z1",ylab = "Z3",main="scaled ncdata bi plot")
+plot(prncdata.summary$importance[2,],main="proportion of variance explained for Unscaled",xlab = "principal component",ylab = "pve")
+plot(prncdata.scaled.summary$importance[2,],main="proportion of variance explained for scaled",xlab = "principal component",ylab = "pve")
+plot(prncdata.summary$importance[3,],main="cum pve for Unscaled",xlab = "principal component",ylab = "Cum pve")
+plot(prncdata.scaled.summary$importance[3,],main="cum pve for scaled",xlab = "principal component",ylab = "Cum pve")
+```
+
+Practical dificulties faced while doing pca on nci60 data
+1. should we scale the variance
+Did PCA for both the cases as it is not clear whether to scale gene expressions(Every column is gene expression so scaling may reduce the weight for expression by gene(or cell) with high variance. 
+2. How many components to use.
+As expected the scree plot have elbow at 5 pCA with 61% variance applied but at 10 its at 71% and at 20 81%, so 7 or 8 may be a good choice with 66% and 68% of variance explained
+
+**Clustering**
+1. clustering with scaled data
+```{r}
+sd.data = scale(ncdata)
+data.dist = dist(ncdata)
+ncd.hclust.complete = hclust(data.dist,method = "complete")
+ncd.hclust.average = hclust(data.dist,method = "average")
+ncd.hclust.single = hclust(data.dist,method = "single")
+plot(ncd.hclust.single,main = "single linkage NCI60" ,labels=nci.labs,xlab = "",ylab = "",sub = "")
+plot(ncd.hclust.average,main = "average linkage NCI60" ,labels=nci.labs,xlab = "",ylab = "",sub = "")
+plot(ncd.hclust.complete,main = "complete linkage NCI60" ,labels=nci.labs,xlab = "",ylab = "",sub = "")
+ncd.hclust.clusters = cutree(ncd.hclust.complete,4)
+abline(h=110,col="red")
+#comparing results with kmeans
+ncdata.km.out = kmeans(sd.data,4,nstart = 20)
+ncd.km.clusters = ncdata.km.out$cluster
+table(ncd.km.clusters,ncd.hclust.clusters)
+# notice that two clusters are seperated perfectly by both, other two are mixed
+# clustering on principal components
+ncd.hclust.prcomp = hclust(dist(prncdata.scaled$x[,1:5]),method = "complete")
+plot(ncd.hclust.prcomp,main = "PCA complete linkage NCI60 " ,labels=nci.labs,xlab = "",ylab = "",sub = "")
+ncdata.hc.prcomp.clusters = cutree(ncd.hclust.prcomp,4)
+table(ncd.km.clusters,ncdata.hc.prcomp.clusters)
+table(ncdata.hc.prcomp.clusters,ncd.hclust.clusters)
+table(nci.labs,ncd.hclust.clusters)
+```
+

@@ -1,0 +1,14 @@
+---
+title: "SVM"
+author: "bhaskar"
+output: html_document
+---
+
+Using library *e1071* for SVM
+svm()
+- kerner="linear"
+- cost = cost of violation to the margin. if cost is large then narrow margnis and few support vectors violating
+```{r}
+
+```
+
