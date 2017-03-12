@@ -1,0 +1,184 @@
+---
+title: "Trees"
+author: "bhaskar"
+output: html_document
+---
+
+## DECISION TREES
+
+### Classification trees
+
+Fitting classification trees to analyse sales of ***carseats dataset***
+Sales is a continous variable, splitting the variable at 8 to create a new binary variable ***High***
+
+```{r}
+library(ISLR)
+library(tree)
+attach(Carseats)
+High = ifelse(Sales<=8,"No","Yes")
+Carseats = data.frame(Carseats,High)
+tree.carseats = tree(High ~ . -Sales,data =Carseats)
+summary(tree.carseats)
+```
+deviance and residual mean deviance
+```{r}
+plot(tree.carseats)
+text(tree.carseats,pretty = 10)
+```
+
+We can identify ***ShelveLoc*** as the most important indicator of sales
+
+To print the output corresponding to each branch
+```{r}
+tree.carseats
+```
+Ecaluating performance using validation set.
+```{r}
+set.seed(2)
+train = sample(1:nrow(Carseats),200)
+carseats.test = Carseats[-train,]
+High.test = High[-train]
+tree.carseats = tree(High~.-Sales,Carseats,subset = train)
+# using type = "class" in predict gives actual class outcomes
+tree.pred = predict(tree.carseats,carseats.test,type = "class")
+table(tree.pred,High.test)
+```
+Check if a pruned tree performs better
+- using function cv.tree()
+- default of cv.tree() is to use deviance for cross validation and pruning, if FUN=prune.misclass it uses misclassification error rate instead
+- outputs cost complexity, number of terminal nodes, error rate 
+```{r}
+set.seed(3)
+cv.carseats = cv.tree(tree.carseats,FUN = prune.misclass)
+cv.carseats
+```
+we see that the best model has size 0, cost complexity parameter 1.75 and cv.error 50
+
+plot error as a function of size and as a function of cost complexity parameter
+```{r}
+par(mfrow=c(1,2))
+plot(cv.carseats$size,cv.carseats$dev,type="b",main="Error ~ size")
+plot(cv.carseats$k,cv.carseats$dev,type="b",main="Error ~ penalty")
+par(mfrow=c(1,1))
+```
+we can use ***prune.miscalass*** function for cost complexity pruning
+```{r}
+tree.pruuned.carseats =  prune.misclass(tree.carseats,best=9)
+plot(tree.pruuned.carseats,Carseats)
+text(tree.pruuned.carseats,pretty = 0)
+```
+checking performance on test set
+```{r}
+yhat = predict(tree.pruuned.carseats,newdata = carseats.test,type="class")
+table(yhat,High.test)
+```
+77% classified correctly
+
+check test set performance on some other model, it will perform less better
+```{r}
+tree.pruuned.carseats = prune.misclass(tree.carseats,best = 15)
+yhat = predict(tree.pruuned.carseats,newdata = carseats.test,type="class")
+table(yhat,High.test)
+```
+74% of obseravations classified correctly
+
+### Regression trees
+```{r}
+library(MASS)#for boston data
+set.seed(1)
+?Boston
+train = sample(1:nrow(Boston),nrow(Boston)/2)
+tree.boston = tree(medv~.,data = Boston,subset = train)
+summary(tree.boston)
+```
+In case of regression the deviance is sum of residual squares.
+```{r}
+plot(tree.boston,Boston)
+text(tree.boston,pretty = T)
+```
+Using ***cv.tree*** to see if pruning makes it better
+```{r}
+cv.boston = cv.tree(tree.boston)
+plot(cv.boston$size,cv.boston$dev,main="Error ~ Size",type="b")
+```
+
+Most complicated selected as best model by cross validation, in such cases ***prune.true()*** can be used for pruning
+```{r}
+tree.boston.prune = prune.tree(tree.boston,best = 5)
+plot(tree.boston.prune,Boston)
+text(tree.boston,pretty = 0)
+```
+
+Checking the performance of best model from crossvalidation
+```{r}
+yhat = predict(tree.boston,newdata = Boston[-train,])
+Boston.test = Boston[-train,"medv"]
+plot(yhat,Boston.test)
+abline(a = 10,b = 1)
+mean((yhat - Boston.test)^2)
+sqrt(mean((yhat - Boston.test)^2))
+```
+That implies true value is around 5005$ of predicted value of medv
+
+### Bagging and random forest
+Using ***randomForest package***
+
+**Bagging**
+```{r}
+library(randomForest)
+dim(Boston)
+set.seed(1)
+bag.boston = randomForest(medv~.,data=Boston,mtry=13,subset = train,importance=T)
+bag.boston
+yhat = predict(bag.boston,newdata = Boston[-train,])
+plot(yhat,Boston.test)
+abline(0,1)
+sqrt(mean((yhat - Boston.test)^2))
+```
+thruth around 3658$ of predicted
+Default ntree of randomForest is with ntree= 500
+```{r}
+bag.boston = randomForest(medv~.,data=Boston,mtry=13,subset = train,importance=T,ntree =25)
+bag.boston
+yhat = predict(bag.boston,newdata = Boston[-train,])
+plot(yhat,Boston.test)
+abline(0,1)
+sqrt(mean((yhat - Boston.test)^2))
+```
+
+**RandomForest**
+- Fit using mtry less than total, default of regression n/3 and srqt(n) for classification 
+```{r}
+rf.boston = randomForest(medv~.,data = Boston,importance=T,mtry=6,subset=train,ntree=1000)
+yhat = predict(rf.boston,newdata = Boston[-train,])
+plot(yhat,Boston.test)
+abline(0,1)
+sqrt(mean((yhat - Boston.test)^2))
+```
+
+### Boosting
+Using ***gbm() package*** 
+```{r}
+library(gbm)
+gbm.boston = gbm(medv~.,data = Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4)
+```
+note that we used distribution = gaussian
+```{r}
+yhat = predict(gbm.boston,newdata = Boston[-train,],n.trees = 5000)
+plot(yhat,Boston.test)
+abline(0,1)
+sqrt(mean(yhat - Boston.test)^2)
+```
+
+default shrinkage parameter is 0.001
+
+```{r}
+gbm.boston = gbm(medv~.,data = Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4,shrinkage = 0.2)
+yhat = predict(gbm.boston,newdata = Boston[-train,],n.trees = 5000)
+plot(yhat,Boston.test)
+abline(0,1)
+sqrt(mean(yhat - Boston.test)^2)
+```
+shrinkage 0.2 is better than 0.001 for this data
+shriinkage can be decided through cv
+

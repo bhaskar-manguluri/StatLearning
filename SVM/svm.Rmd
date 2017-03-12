@@ -9,6 +9,148 @@ svm()
 - kerner="linear"
 - cost = cost of violation to the margin. if cost is large then narrow margnis and few support vectors violating
 ```{r}
-
+library(e1071)
+set.seed(10111)
+x = matrix(rnorm(20*2),ncol = 2)
+y = rep(c(-1,1),c(10,10))
+x[y==1,] = x[y==1,]+1
+plot(x,col=3-y,pch = 19)
+dat = data.frame(x = x, y= as.factor(y))
+svmfit = svm(y~.,data = dat,kernel = "linear",cost = 10,scale = F)
+```
+depending on the application, scaling can be True or false
+```{r}
+plot(svmfit,data = dat)
+```
+identities of support vectors can be diplayed by **index** column in the output
+```{r}
+svmfit$index
+summary(svmfit)
+```
+*cost* is a tuning parameter for the svm(), ususally decided through *crossvalidation*
+svm for above data using smaller cost
+```{r}
+svmfit1 = svm(y~.,data = dat,kernel = "linear",cost = 1,scale = F)
+plot(svmfit1,data = dat)
+svmfit1$index
+summary(svmfit1)
 ```
 
+SVM neuther outputs the coefficients of linear boundary or the width of the margin, cross validation is done using the tune() of e1071 library
+```{r}
+set.seed(1)
+tune.out = tune(svm,y~.,data = dat,kernel="linear",ranges = list(cost=c(0.001,0.01,0.1,1.5,10,100)))
+summary(tune.out)
+#best model summary stored in best model column of the output
+summary(tune.out$best.model)
+```
+check performance on a test set
+```{r}
+set.seed(10)
+xtest = matrix(rnorm(20*2),ncol = 2)
+ytest = rep(c(-1,1),c(10,10))
+xtest[ytest==1,] = xtest[ytest==1,]+1
+test.data = data.frame(x=xtest,y=as.factor(ytest))
+yhat.predict = predict(tune.out$best.model,test.data)
+table(yhat.predict,test.data$y)
+```
+one observation is miscassified, what if classes can have a clear linear boundary
+```{r}
+x[y==1,] = x[y==1]+0.5
+plot(x,col=3-y,pch=19)
+dat = data.frame(x = x, y= as.factor(y))
+svm.fit2 = svm(y~.,data = dat,cost = 100,scale = F)
+table(predict(svm.fit2,test.data),test.data$y)
+tune.out = tune(svm,y~.,data = dat,kernel="linear",ranges = list(cost=c(0.001,0.01,0.1,1,5,10,100,1000,10000)))
+summary(tune.out)
+yhat.predict = predict(tune.out$best.model,test.data)
+table(yhat.predict,test.data$y)
+```
+svm with kernel="polynomial"/"radial" is non linear
+```{r}
+set.seed(10)
+x = matrix(rnorm(200*2),ncol = 2)
+y = rep(c(1,2),c(150,50))
+x[1:100,] = x[1:100,]+2
+x[101:150,]=x[101:150,]-2
+plot(x,col=3-y,pch=19)
+dat = data.frame(x = x,y=as.factor(y))
+set.seed(10)
+train = sample(200,100)
+svm.fit = svm(y~.,kernel="radial",cost = 10,gamma= 1,scale = F,data = dat[train,])
+plot(svm.fit,data=dat[train,])
+table(predict(svm.fit,newdata = dat[-train,]),dat[-train,]$y)
+#tune for gamma and cost
+tune.out = tune(svm,y~.,data = dat[train,],kernel="radial",ranges = list(cost=c(0.01,0.1,1,10,100,1000),gamma=c(0.5,1,2,3,4)))
+summary(tune.out)
+plot(tune.out$best.model,data = dat[train,])
+table(predict=predict(tune.out$best.model,newdata = dat[-train,]),true=dat[-train,]$y)
+```
+**ROC plots**
+
+```{r}
+library(ROCR)
+rocplot = function(pred,thruth,...){
+        predob = prediction(pred,thruth)
+        perf = performance(prediction.obj = predob,measure = "tpr",x.measure = "fpr")
+        plot(perf,...)
+}
+```
+By default ***svm*** function outputs class labels, if we want fitted values instead argument ***decision.values=T***
+```{r}
+svmfit = svm(y~., data = dat[train,],kernel="radial",gamma=2,cost=1,decision.values=T)
+yhat = predict(svmfit,newdata=dat[train,],decision.values= T)
+fitted = attributes(yhat)$decision.values
+rocplot(fitted,dat[train,"y"],main="ROC on Train data")
+```
+***svm*** produces better flexible fit with higher value of gamma
+```{r}
+svmfit = svm(y~., data = dat[train,],kernel="radial",gamma=50,cost=1,decision.values=T)
+yhat = predict(svmfit,newdata=dat[train,],decision.values= T)
+fitted = attributes(yhat)$decision.values
+rocplot(fitted,dat[train,"y"],main="ROC on Train data")
+```
+But ***ROC curve performs better with gamma =2 for test data
+```{r}
+yhat = predict(svmfit,newdata=dat[-train,],decision.values= T)
+fitted = attributes(yhat)$decision.values
+rocplot(fitted,dat[-train,"y"],main="ROC on Train data")
+```
+
+**SVM for multiple classes**
+performing svm on previous data by adding a third class, ***svm*** function performs one vs one apprach for the dataset
+```{r}
+set.seed(1)
+x= rbind(x,matrix(rnorm(50*2),ncol=2))
+y = c(y,rep(0,50))
+x[y %in% c(0,2)]=x[y %in% c(0,2)]+2
+dat = data.frame(x,as.factor(y))
+svm.fit2 = svm(y~.,data = dat,kernel="radial",gamma=1,cost=1)
+summary(svm.fit)
+plot(svm.fit2,dat)
+```
+
+### Application to gene expression data
+
+For ***Khan data set*** which consists of gene expression measurement of several tissues of four distinct types of small round blue tumors
+```{r}
+library(ISLR)
+names(Khan)
+dim(Khan$xtrain)
+dim(Khan$xtest)
+length(Khan$ytrain)
+length(Khan$ytest)
+table(Khan$ytrain)
+table(Khan$ytest)
+```
+
+In this example we have very wide data set with 6308 columns per 63 observations , hence using ***linear kernal*** would be sufficient, as added flexibility using a polynaomial and radial kernel is unnecessary
+
+```{r}
+dat = data.frame(x=Khan$xtrain,y=as.factor(Khan$ytrain))
+svm.model = svm(y~.,data=dat,kernel="linear",cost = 10)
+table(svm.model$fitted,dat$y)
+dat.te = data.frame(x=Khan$xtest,y=as.factor(Khan$ytest))
+table(pred=predict(svm.model,newdata = dat.te),thruth=dat.te$y)
+```
+We see that using cost=10 yields in 2 test set errors
