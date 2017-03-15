@@ -32,7 +32,7 @@ To print the output corresponding to each branch
 ```{r}
 tree.carseats
 ```
-Ecaluating performance using validation set.
+Evaluating performance using validation set.
 ```{r}
 set.seed(2)
 train = sample(1:nrow(Carseats),200)
@@ -57,7 +57,7 @@ we see that the best model has size 0, cost complexity parameter 1.75 and cv.err
 plot error as a function of size and as a function of cost complexity parameter
 ```{r}
 par(mfrow=c(1,2))
-plot(cv.carseats$size,cv.carseats$dev,type="b",main="Error ~ size")
+plot(cv.carseats$size,cv.carseats$dev,type="b",main="Error ~ terminal nodes(size)")
 plot(cv.carseats$k,cv.carseats$dev,type="b",main="Error ~ penalty")
 par(mfrow=c(1,1))
 ```
@@ -106,10 +106,10 @@ Most complicated selected as best model by cross validation, in such cases ***pr
 ```{r}
 tree.boston.prune = prune.tree(tree.boston,best = 5)
 plot(tree.boston.prune,Boston)
-text(tree.boston,pretty = 0)
+text(tree.boston.prune,pretty = 0)
 ```
 
-Checking the performance of best model from crossvalidation
+Checking the performance of best model from cross validation
 ```{r}
 yhat = predict(tree.boston,newdata = Boston[-train,])
 Boston.test = Boston[-train,"medv"]
@@ -155,6 +155,13 @@ plot(yhat,Boston.test)
 abline(0,1)
 sqrt(mean((yhat - Boston.test)^2))
 ```
+around 3396$
+```{r}
+importance(rf.boston)
+```
+Two measures of variable importance are reported
+- First based on accuracy of the predicted model over OOB samples
+- based on node purity, training RSS for regression and deviance for classifications as default
 
 ### Boosting
 Using ***gbm() package*** 
@@ -181,4 +188,12 @@ sqrt(mean(yhat - Boston.test)^2)
 ```
 shrinkage 0.2 is better than 0.001 for this data
 shriinkage can be decided through cv
+
+**partial importance plots
+```{r}
+plot(gbm.boston,i="lstat")
+plot(gbm.boston,i="rm")
+```
+Median house prices increasing with rm and decreasing with lstat
+
 

@@ -1,0 +1,267 @@
+---
+title: "NeuralNets"
+author: "bhaskar"
+output: html_document
+---
+
+
+
+### Projection pursuit regression and neural networks
+The central concept in both methods to take linear combination of input features and then model target as non linear function of these derived features
+
+project pirsuit regression f(x) = sum(g(transpose(w)*X))
+
+g is the non linear function and the name is because we are in a pirsuit of projection along the direction defined by unit vector matrix which explains the data well.
+
+### neural networks 
+
+- Z (transformed scores) = activationFunction(linear combination of inputs)
+- T = linear combination of Z
+- f(X) = g(T) , where g is ouput function .
+- linear combination of inputs from one layer can use constant intercept(bias constant)
+- general activation function is *sigmoid transformation*, where any other function like *gaussian radial basis* or *tanh()*  can be used
+- general output function in case of regression is identity function, with one output making it a linear model with hidden layers, where as for  classification it is sofmax function, which gives postive estimates which sum to one making it multi class logistic model with hidden layers
+- Neural network with one hidden layer is almost same as PPR , where output function for PPR is non parametric function where in case of neural networks it is a simple function based on activation function
+
+**Fitting neural networks**
+
+ Neural network is a parameteric approach with unknown parameters also called as weights, error function is a function of weights, and  are calculated by minimising the error function, Error function for regression setting is least squares and for classification it is cross entropy, Hence neural network for classification is logistic model with hidden units. To avoid overfitting either penalty term to error function or by early stopping. Generally error function is minimised by gradient descent, called backward propagation in this setting as the structure of the problem makes it easier to calculate gradient using chain rule of differentiation. learning rate and number of iterations determine the convergence of gradient descent. Backward propagation can be very slow alternate better fitting appraches are conjugate gradients and variable metric methods
+
+### Practical Issues with training NN
+
+Neural network is generally overparametrized, hence certain guidelines may be useful in fitting
+
+1. **Starting values**
+- If weights are small neural networks are close to zero, then the neural network from sigmoid activation is close to linear model. 
+- Initial weights are chosen to be random values near zero and it becomes non linear as weights increase
+- Starting instead with large weights often leads to poor solutions
+2. **Over fitting**
+- prone to overfit hence add penalty to error function controlled by *weight decay* variable as tuning parameter, and use CV to estimate it. 
+3. Scaling of the inputs
+- Scaling is preferred to treat all the bottom layers equally
+4. Number of hidden units and layers
+- with too few hidden units the model might not have enough flexibility to capture nonlinearities
+- if appropriate regularisation param is selected with too many hidden units then overfitting can be avoided
+- multiple hidden layers allow construction of hierarchial features at different levels of resolution
+5. Multiple Minima
+ There can be many local minima, making the output dependent on starting weights, so tryingout with random starting configuration can be helpful
+
+Bayesion approach to fitting NN bayesian Neural networks
+Boosted neural Networks : boosting is efficient with weak learners and hence too few hidden layers(generally 1) and few units are used .
+
+### Psedo code
+```{r}
+# for all weights{
+# if (grad.old*grad>0){
+# delta := min(delta*eta.plus, delta.max)
+# weights := weights - sign(grad)*delta
+# grad.old := grad
+# }
+# else if (grad.old*grad<0){
+# weights := weights + sign(grad.old)*delta
+# delta := max(delta*eta.minus, delta.min)
+# grad.old := 0
+# }
+# else if (grad.old*grad=0){
+# weights := weights - sign(grad)*delta
+# grad.old := grad
+# }
+# }
+# # weights for normal backpropagation
+# for all weights{
+# weights := weights - grad*delta
+# }
+```
+
+
+**training options**
+except for formula and data everything has default values 
+1. ***formula***
+in the form of y~x1+x2+...+xn
+2. ***data***
+matrix consisting of covariates and response in the formula
+3. ***hidden***
+***1*** list of neurons in each layer
+4. ***threshold***
+***0.01*** the threshhold for absolute value of gradient used to stop learning
+5. ***rep***
+***1*** no of repetitions the training procedure is repeated
+6. ***startweights***
+***rnorm()*** matrix of starting weights
+7. ***algorithm***
+***rprop+*** *backprop*:for gradient descent back propagation , *rprop+,rprp-* for resilient gradient descent with backtracking and without. *sad,slr* smallest absolute derivative and smallest learning rate
+8. ***err.fct***
+***sse*** the error function. "ce" fr common entropy, likelihood etc can be used
+10. ***act.function***
+***logistic*** .The activation function , note that sigmoid will give values between 0 and 1, tahn between -1 and 1
+9. ***linear.output***
+***T*** whether activation function should not be applied to output layer
+11. ***likelihood***
+***False*** indicator if likelihood is the error function, will calculate AIC, BIC if true
+12. ***exclude***
+***NULL*** matrix of weights that should be exlcuded from training
+13. ***constant.weights***
+***NULL*** values of weights to be excluded from training
+
+**output**
+All the info need to reproduce the nnet
+1. ***net.result***
+used to compute the result on new covariates
+2. ***weights***
+the fitted weights
+3. ***generalisedweights***
+the effect of ith covariate on log odds, similar to regression coefficient
+4. ***result.matrix***
+all the info of neural net
+5. ***start.weights***
+start weights used
+6. ***covariate,resposne,data***
+corresponding training data used
+
+### Neural Nets Net for regression on Boston data
+
+**Prepearing data for neuralnets**
+```{r}
+# check for missing values
+library(MASS)
+sum(is.na(Boston))
+
+#split train and test
+set.seed(500)
+trainIndex = sample(nrow(Boston),round(0.75*nrow(Boston)))
+```
+**trying out neural networks before scalinig**
+```{r}
+Boston.train = Boston[trainIndex,]
+Boston.test = Boston[-trainIndex,]
+library(neuralnet)
+#nnet.boston = neuralnet(formula = medv~.,data = Boston.train,hidden = c(5,3),linear.output = T)
+# note that neural net function does not accept . in the formula
+f = as.formula(paste("medv ~",paste(names(Boston.train)[1:13],collapse = "+")))
+nnet.boston = neuralnet(formula = f,data = Boston.train,hidden = c(5,3),linear.output = T)
+# calculate testMSE
+predBoston = compute(nnet.boston,Boston.test[,1:13])$net.result
+max(predBoston)
+testBoston <- Boston.test$medv
+max(testBoston)
+mean((testBoston - predBoston)^2)
+```
+we see that the mean squared error is 72.2
+**linear.output = T** as it is regression, for classification its false
+check nn after scaling the data
+```{r}
+# scale the data
+scaledBoston = as.data.frame(scale(Boston,center = T,scale = T))
+
+Boston.train = scaledBoston[trainIndex,]
+Boston.test = scaledBoston[-trainIndex,]
+nnet.boston = neuralnet(formula = f,data = Boston.train,hidden = c(5,3),linear.output = T)
+
+#plot the nn
+plot(nnet.boston)
+# shows bias yerms in blue and weights in black
+gwplot(nnet.boston)
+
+
+# calculate testMSE
+predBoston = compute(nnet.boston,Boston.test[,1:13])$net.result
+
+# Descaling for comparison
+predBoston <- predBoston*sqrt(var(Boston$medv))+mean(Boston$medv)
+testBoston <- Boston.test$medv*sqrt(var(Boston$medv))+mean(Boston$medv)
+
+# Calculating MSE
+MSE <- mean((testBoston - predBoston)^2)
+MSE
+```
+so scaling improved the neuralnet, in general scaling makes weights on the bottom layer equally which can lead to better fitting. sometimes by not scaling the algorithm maynot even converge before reaching maximum number of iterations
+
+Trying min,max scaling instead of mean,SD
+```{r}
+# Scaling data for the NN
+maxs = apply(Boston, 2, max) 
+mins = apply(Boston, 2, min)
+scaledBoston = as.data.frame(scale(Boston, center = mins, scale = maxs - mins))
+Boston.train = scaledBoston[trainIndex,]
+Boston.test = scaledBoston[-trainIndex,]
+nnet.boston = neuralnet(formula = f,data = Boston.train,hidden = c(5,3),linear.output = T)
+
+# Calculating MSE
+predBoston = compute(nnet.boston,Boston.test[,1:13])$net.result
+predBoston = predBoston*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+testBoston = Boston.test$medv*(max(Boston$medv)-min(Boston$medv))+min(Boston$medv)
+MSE <- sum((testBoston - predBoston)^2)/nrow(Boston.test)
+MSE
+
+## plot prediction
+plot(testBoston,predBoston,col='red',main='Real vs predicted NN',pch=18,cex=0.7)
+abline(0,1,lwd=2)
+```
+
+
+### Neural nets for classification on Infertility data
+```{r}
+library(datasets)
+head(infert)
+nn <- neuralnet(case~age+parity+induced+spontaneous,data=infert, hidden=2, err.fct="ce",linear.output=FALSE)
+nn$
+out <- cbind(nn$covariate,nn$net.result[[1]])
+dimnames(out) <- list(NULL, c("age", "parity","induced","spontaneous","nn-output"))
+head(out)
+plot(nn)
+# plot generalised weights
+gwplot(nn,selected.covariate = "age",min=-2.5 , max = 5)
+gwplot(nn,selected.covariate = "parity",min=-2.5 , max = 5)
+gwplot(nn,selected.covariate = "induced",min=-2.5 , max = 5)
+gwplot(nn,selected.covariate = "spontaneous",min=-2.5 , max = 5)
+```
+generalised weights form multivariate normal distribution . from the graph we can see that generalised weight of age is almost zero, and variance of induced and spontaneous is greater than one showing non linearity.
+*confidence.interval* is a useful function if it satisfy conditions that 1. no irrelevant neurons 2. error function is log-likelihood
+```{r}
+nn <- neuralnet(case~parity+induced+spontaneous,data=infert, hidden=2, err.fct="ce",linear.output=FALSE,likelihood = T)
+confidence.interval(nn,alpha = 0.05)
+# prediction function
+prediction(nn)
+```
+
+### Neural net to find XOR
+```{r}
+XOR <- c(0,1,1,0)
+xor.data <- data.frame(expand.grid(c(0,1), c(0,1)), XOR)
+print(net.xor <- neuralnet(XOR~Var1+Var2, xor.data, hidden=2, rep=5))
+plot(net.xor, rep="best")
+```
+
+### Neural Net to find e^x
+
+```{r}
+traininginput <-  as.data.frame(runif(50, min=0, max=100))
+trainingoutput <- e^(traininginput)
+ 
+#Column bind the data into one variable
+trainingdata <- cbind(traininginput,trainingoutput)
+colnames(trainingdata) <- c("Input","Output")
+ 
+#Train the neural network
+
+net.epower <- neuralnet(Output~Input,trainingdata, hidden=10, threshold=0.01)
+print(net.epower)
+ 
+#Plot the neural network
+plot(net.epower)
+ 
+#Test the neural network on some training data
+testdata <- as.data.frame((1:10)^2) #Generate some squared numbers
+net.results <- compute(net.epower, testdata) #Run them through the neural network
+ 
+#Lets see what properties net.sqrt has
+ls(net.results)
+ 
+#Lets see the results
+print(net.results$net.result)
+
+cleanoutput <- cbind(testdata,e^(testdata),
+                         as.data.frame(net.results$net.result))
+colnames(cleanoutput) <- c("Input","Expected Output","Neural Net Output")
+print(cleanoutput)
+```
