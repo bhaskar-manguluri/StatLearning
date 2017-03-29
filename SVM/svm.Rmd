@@ -77,7 +77,7 @@ plot(x,col=3-y,pch=19)
 dat = data.frame(x = x,y=as.factor(y))
 set.seed(10)
 train = sample(200,100)
-svm.fit = svm(y~.,kernel="radial",cost = 10,gamma= 1,scale = F,data = dat[train,])
+svm.fit = svm(y~.,kernel="radial",cost =0.5,gamma= 3,scale = F,data = dat[train,])
 plot(svm.fit,data=dat[train,])
 table(predict(svm.fit,newdata = dat[-train,]),dat[-train,]$y)
 #tune for gamma and cost

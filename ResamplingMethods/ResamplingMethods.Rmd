@@ -46,7 +46,7 @@ cv.err$delta
 cv.error = rep(0,5)
 for(i in 1:5) {
         glm.fit = glm(mpg~poly(horsepower,i),data = Auto)
-        cv.error[i] = cv.glm(data = Auto,glmfit = glm.fit)$delta[2]
+        cv.error[i] = cv.glm(data = Auto,glmfit = glm.fit,K = 10)$delta[2]
 }
 plot(cv.error,type = "b")
 ```

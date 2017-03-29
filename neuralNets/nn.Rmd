@@ -204,7 +204,6 @@ abline(0,1,lwd=2)
 library(datasets)
 head(infert)
 nn <- neuralnet(case~age+parity+induced+spontaneous,data=infert, hidden=2, err.fct="ce",linear.output=FALSE)
-nn$
 out <- cbind(nn$covariate,nn$net.result[[1]])
 dimnames(out) <- list(NULL, c("age", "parity","induced","spontaneous","nn-output"))
 head(out)

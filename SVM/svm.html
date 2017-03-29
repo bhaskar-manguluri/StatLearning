@@ -391,7 +391,7 @@ x= rbind(x,matrix(rnorm(50*2),ncol=2))
 y = c(y,rep(0,50))
 x[y %in% c(0,2)]=x[y %in% c(0,2)]+2
 dat = data.frame(x,as.factor(y))
-svm.fit2 = svm(y~.,data = dat,kernel=&quot;radial&quot;,gamma=2,cost=1)
+svm.fit2 = svm(y~.,data = dat,kernel=&quot;radial&quot;,gamma=1,cost=1)
 summary(svm.fit)</code></pre>
 <pre><code>## 
 ## Call:
@@ -414,7 +414,49 @@ summary(svm.fit)</code></pre>
 ## 
 ## Levels: 
 ##  1 2</code></pre>
-<pre class="r"><code>plot(svm.fit2,data=dat)</code></pre>
+<pre class="r"><code>plot(svm.fit2,dat)</code></pre>
+<div id="application-to-gene-expression-data" class="section level3">
+<h3>Application to gene expression data</h3>
+<p>For <strong><em>Khan data set</em></strong> which consists of gene expression measurement of several tissues of four distinct types of small round blue tumors</p>
+<pre class="r"><code>library(ISLR)
+names(Khan)</code></pre>
+<pre><code>## [1] &quot;xtrain&quot; &quot;xtest&quot;  &quot;ytrain&quot; &quot;ytest&quot;</code></pre>
+<pre class="r"><code>dim(Khan$xtrain)</code></pre>
+<pre><code>## [1]   63 2308</code></pre>
+<pre class="r"><code>dim(Khan$xtest)</code></pre>
+<pre><code>## [1]   20 2308</code></pre>
+<pre class="r"><code>length(Khan$ytrain)</code></pre>
+<pre><code>## [1] 63</code></pre>
+<pre class="r"><code>length(Khan$ytest)</code></pre>
+<pre><code>## [1] 20</code></pre>
+<pre class="r"><code>table(Khan$ytrain)</code></pre>
+<pre><code>## 
+##  1  2  3  4 
+##  8 23 12 20</code></pre>
+<pre class="r"><code>table(Khan$ytest)</code></pre>
+<pre><code>## 
+## 1 2 3 4 
+## 3 6 6 5</code></pre>
+<p>In this example we have very wide data set with 6308 columns per 63 observations , hence using <strong><em>linear kernal</em></strong> would be sufficient, as added flexibility using a polynaomial and radial kernel is unnecessary</p>
+<pre class="r"><code>dat = data.frame(x=Khan$xtrain,y=as.factor(Khan$ytrain))
+svm.model = svm(y~.,data=dat,kernel=&quot;linear&quot;,cost = 10)
+table(svm.model$fitted,dat$y)</code></pre>
+<pre><code>##    
+##      1  2  3  4
+##   1  8  0  0  0
+##   2  0 23  0  0
+##   3  0  0 12  0
+##   4  0  0  0 20</code></pre>
+<pre class="r"><code>dat.te = data.frame(x=Khan$xtest,y=as.factor(Khan$ytest))
+table(pred=predict(svm.model,newdata = dat.te),thruth=dat.te$y)</code></pre>
+<pre><code>##     thruth
+## pred 1 2 3 4
+##    1 3 0 0 0
+##    2 0 6 2 0
+##    3 0 0 4 0
+##    4 0 0 0 5</code></pre>
+<p>We see that using cost=10 yields in 2 test set errors</p>
+</div>
 
 
 
