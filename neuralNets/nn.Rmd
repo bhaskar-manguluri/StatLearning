@@ -4,7 +4,7 @@ author: "bhaskar"
 output: html_document
 ---
 
-
+ 
 
 ### Projection pursuit regression and neural networks
 The central concept in both methods to take linear combination of input features and then model target as non linear function of these derived features
@@ -15,17 +15,19 @@ g is the non linear function and the name is because we are in a pirsuit of proj
 
 ### neural networks 
 
+instead of using a non parametric scatter plot smoother as in project pirsuit regression , neural nets uses predefined activation function like sigmoid transformation to iteratively(hidden layers) derive the non linear transformations and model a linear model in hidden units
+
 - Z (transformed scores) = activationFunction(linear combination of inputs)
 - T = linear combination of Z
 - f(X) = g(T) , where g is ouput function .
 - linear combination of inputs from one layer can use constant intercept(bias constant)
-- general activation function is *sigmoid transformation*, where any other function like *gaussian radial basis* or *tanh()*  can be used
-- general output function in case of regression is identity function, with one output making it a linear model with hidden layers, where as for  classification it is sofmax function, which gives postive estimates which sum to one making it multi class logistic model with hidden layers
+- general activation function is *sigmoid transformation*, where any other function like *gaussian radial basis* or *tanh()*  can be used, with condition as non decreasing , bounded and differentiable function
+- general output function in case of regression is identity function, with one output making it a linear model in hidden units, where as for  classification it is sofmax function, which gives postive values for each class which sum up to one as in muti class logistic regression
 - Neural network with one hidden layer is almost same as PPR , where output function for PPR is non parametric function where in case of neural networks it is a simple function based on activation function
 
 **Fitting neural networks**
 
- Neural network is a parameteric approach with unknown parameters also called as weights, error function is a function of weights, and  are calculated by minimising the error function, Error function for regression setting is least squares and for classification it is cross entropy, Hence neural network for classification is logistic model with hidden units. To avoid overfitting either penalty term to error function or by early stopping. Generally error function is minimised by gradient descent, called backward propagation in this setting as the structure of the problem makes it easier to calculate gradient using chain rule of differentiation. learning rate and number of iterations determine the convergence of gradient descent. Backward propagation can be very slow alternate better fitting appraches are conjugate gradients and variable metric methods
+ Neural network is a parameteric approach with unknown parameters also called as weights, error function is a function of weights, and are calculated by minimising the error function, typical error function for regression setting is *least squares* and for classification it is *cross entropy*. To avoid overfitting traditionally early stopping the training procedure, adding a regularising term(also known as weight decay) can also be employed and weight decay is found to have substancial improvement in the predictions of neural networks. Generally error function is minimised by gradient descent, called backward propagation in this setting as the structure of the problem makes it easier to calculate gradient using chain rule of differentiation. learning rate and number of iterations determine the convergence of gradient descent. Backward propagation can be very slow alternate better fitting appraches are conjugate gradients and variable metric methods.Package **neural net** has methods for resilient backprogation and globally convergent version introduced by Anastasiadis et al. (2005).
 
 ### Practical Issues with training NN
 
@@ -35,21 +37,236 @@ Neural network is generally overparametrized, hence certain guidelines may be us
 - If weights are small neural networks are close to zero, then the neural network from sigmoid activation is close to linear model. 
 - Initial weights are chosen to be random values near zero and it becomes non linear as weights increase
 - Starting instead with large weights often leads to poor solutions
+
 2. **Over fitting**
 - prone to overfit hence add penalty to error function controlled by *weight decay* variable as tuning parameter, and use CV to estimate it. 
+
 3. Scaling of the inputs
 - Scaling is preferred to treat all the bottom layers equally
+
 4. Number of hidden units and layers
 - with too few hidden units the model might not have enough flexibility to capture nonlinearities
 - if appropriate regularisation param is selected with too many hidden units then overfitting can be avoided
 - multiple hidden layers allow construction of hierarchial features at different levels of resolution
-5. Multiple Minima
- There can be many local minima, making the output dependent on starting weights, so tryingout with random starting configuration can be helpful
 
-Bayesion approach to fitting NN bayesian Neural networks
+5. Multiple Minima
+ There can be many local minima, making the output dependent on starting weights, so trying out with different random starting weights configuration can be helpful
+
+Bayesion approach to fitting NN bayesian Neural networks: using MCMC is shown to improve nn accuracy
+
 Boosted neural Networks : boosting is efficient with weak learners and hence too few hidden layers(generally 1) and few units are used .
 
-### Psedo code
+##Implementing neural net
+
+*** Data Set generation***
+```{r}
+library(ggplot2)
+library(caret)
+
+# generate data for testing the implemented neural network
+N <- 200 # number of points per class
+D <- 2 # dimensionality
+K <- 4 # number of classes
+X <- data.frame() # data matrix (each row = single example)
+y <- data.frame() # class labels
+
+set.seed(308)
+
+for (j in (1:K)){
+  r <- seq(0.05,1,length.out = N) # radius
+  t <- seq((j-1)*4.7,j*4.7, length.out = N) + rnorm(N, sd = 0.3) # theta
+  Xtemp <- data.frame(x =r*sin(t) , y = r*cos(t)) 
+  ytemp <- data.frame(matrix(j, N, 1))
+  X <- rbind(X, Xtemp)
+  y <- rbind(y, ytemp)
+}
+
+data <- cbind(X,y)
+colnames(data) <- c(colnames(X), 'label')
+```
+X, y are 800 by 2 and 800 by 1 data frames respectively, and they are created in a way such that a linear classifier cannot separate them. They are roughly evenly spaced and a line is not a good decision boundary
+
+***Neural networks construction***
+Now, let’s construct a NN with 2 layers. But before that, we need to convert X into a matrix (for matrix operation later on). For labels in y, a new matrix Y (800 by 4) is created such that for each example (each row in Y), the entry with index==label is 1 (and 0 otherwise).
+```{r}
+X <- as.matrix(X)
+Y <- matrix(0, N*K, K)
+
+for (i in 1:(N*K)){
+  Y[i, y[i,1]] <- 1
+}
+```
+Next, let’s build a function ‘nnet’ that takes two matrices X and Y and returns a list of 4 with W, b and W2, b2 (weight and bias for each layer). I can specify step_size (learning rate) and regularization strength (reg, sometimes symbled as lambda).
+
+For the choice of activation and loss (cost) function, ReLU and softmax are selected respectively.Note that the implementation below uses vectorized operation that may seem hard to follow. If so, you can write down dimensions of each matrix and check multiplications and so on. By doing so, you also know what’s under the hood for a neural network.
+
+```{r}
+nnet <- function(X, Y, step_size = 0.5, reg = 0.001, h = 10, niteration){
+  # get dim of input
+  N <- nrow(X) # number of examples
+  K <- ncol(Y) # number of classes
+  D <- ncol(X) # dimensionality
+  
+  # initialize parameters randomly
+  W <- 0.01 * matrix(rnorm(D*h), nrow = D)
+  b <- matrix(0, nrow = 1, ncol = h)
+  W2 <- 0.01 * matrix(rnorm(h*K), nrow = h)
+  b2 <- matrix(0, nrow = 1, ncol = K)
+  
+  # gradient descent loop to update weight and bias
+  for (i in 0:niteration){
+    # hidden layer, ReLU activation
+    hidden_layer <- pmax(0, X%*% W + matrix(rep(b,N), nrow = N, byrow = T))
+    hidden_layer <- matrix(hidden_layer, nrow = N)
+    # class score
+    scores <- hidden_layer%*%W2 + matrix(rep(b2,N), nrow = N, byrow = T)
+    
+    # compute and normalize class probabilities(softmax)
+    exp_scores <- exp(scores)
+    probs <- exp_scores / rowSums(exp_scores)
+    
+    # compute the loss: sofmax and regularization
+    corect_logprobs <- -log(probs)
+    data_loss <- sum(corect_logprobs*Y)/N
+    reg_loss <- 0.5*reg*sum(W*W) + 0.5*reg*sum(W2*W2)
+    loss <- data_loss + reg_loss
+    
+    # check progress
+    if (i%%1000 == 0 | i == niteration){
+      print(paste("iteration", i,': loss', loss))}
+    
+    # compute the gradient on scores
+    dscores <- probs-Y
+    dscores <- dscores/N
+    
+    # backpropate the gradient to the parameters
+    dW2 <- t(hidden_layer)%*%dscores
+    db2 <- colSums(dscores)
+    # next backprop into hidden layer
+    dhidden <- dscores%*%t(W2)
+    # backprop the ReLU non-linearity
+    dhidden[hidden_layer <= 0] <- 0
+    # finally into W,b
+    dW <- t(X)%*%dhidden
+    db <- colSums(dhidden)
+    
+    # add regularization gradient contribution
+    dW2 <- dW2 + reg *W2
+    dW <- dW + reg *W
+    
+    # update parameter 
+    W <- W-step_size*dW
+    b <- b-step_size*db
+    W2 <- W2-step_size*dW2
+    b2 <- b2-step_size*db2
+  }
+  return(list(W, b, W2, b2))
+}
+```
+*** prediction function and model training***
+```{r}
+nnetPred <- function(X, para = list()){
+  W <- para[[1]]
+  b <- para[[2]]
+  W2 <- para[[3]]
+  b2 <- para[[4]]
+  
+  N <- nrow(X)
+  hidden_layer <- pmax(0, X%*% W + matrix(rep(b,N), nrow = N, byrow = T)) 
+  hidden_layer <- matrix(hidden_layer, nrow = N)
+  scores <- hidden_layer%*%W2 + matrix(rep(b2,N), nrow = N, byrow = T) 
+  predicted_class <- apply(scores, 1, which.max)
+
+  return(predicted_class)  
+}
+
+nnet.model <- nnet(X, Y, step_size = 0.4,reg = 0.0002, h=50, niteration = 7000)
+predicted_class <- nnetPred(X, nnet.model)
+print(paste('training accuracy:',mean(predicted_class == (y))))
+```
+*** Decsion Boundary***
+Next, let’s plot the decision boundary. We can also use the caret package and train different classifiers with the data and visualize the decision boundaries. It is very interesting to see how different algorithms make decisions.(add comparison with caret and others to RMd)
+```{r}
+# plot the resulting classifier
+hs <- 0.01
+x_min <- min(X[,1])-0.2; x_max <- max(X[,1])+0.2
+y_min <- min(X[,2])-0.2; y_max <- max(X[,2])+0.2
+grid <- as.matrix(expand.grid(seq(x_min, x_max, by = hs), seq(y_min, y_max, by =hs)))
+Z <- nnetPred(grid, nnet.model)
+
+ggplot()+
+  geom_tile(aes(x = grid[,1],y = grid[,2],fill=as.character(Z)), alpha = 0.3, show.legend = F)+ 
+  geom_point(data = data, aes(x=x, y=y, color = as.character(label)), size = 2) +
+  xlab('X') + ylab('Y') + ggtitle('Neural Network Decision Boundary') +
+  scale_color_discrete(name = 'Label') + coord_fixed(ratio = 0.6) +
+  theme(axis.ticks=element_blank(), panel.grid.major = element_blank(), panel.grid.minor = element_blank(), 
+        axis.text=element_blank(),legend.position = 'none')
+```
+Using  the above neural network on MNSIT data from kaggle
+```{r}
+displayDigit <- function(X){
+  m <- matrix(unlist(X),nrow = 28,byrow = T)
+  m <- t(apply(m, 2, rev))
+  image(m,col=grey.colors(255))
+}
+
+train <- read.csv("train.csv", header = TRUE, stringsAsFactors = F)
+displayDigit(train[9,-1])
+```
+Now, let’s preprocess the data by removing near zero variance columns and scaling by max(X). The data is also splitted into two for cross validation. Once again, we need to create a Y matrix with dimension N by K. This time the non-zero index in each row is offset by 1: label 0 will have entry 1 at index 1, label 1 will have entry 1 at index 2, and so on. In the end, we need to convert it back. (Another way is put 0 at index 10 and no offset for the rest labels.)
+```{r}
+nzv <- nearZeroVar(train)
+nzv.nolabel <- nzv-1
+
+inTrain <- createDataPartition(y=train$label, p=0.7, list=F)
+
+training <- train[inTrain, ]
+CV <- train[-inTrain, ]
+X <- as.matrix(training[, -1]) # data matrix (each row = single example)
+N <- nrow(X) # number of examples
+y <- training[, 1] # class labels
+
+K <- length(unique(y)) # number of classes
+X.proc <- X[, -nzv.nolabel]/max(X) # scale
+D <- ncol(X.proc) # dimensionality
+
+Xcv <- as.matrix(CV[, -1]) # data matrix (each row = single example)
+ycv <- CV[, 1] # class labels
+Xcv.proc <- Xcv[, -nzv.nolabel]/max(X) # scale CV data
+
+Y <- matrix(0, N, K)
+
+for (i in 1:N){
+  Y[i, y[i]+1] <- 1
+}
+```
+**Model Training and Accuracy**
+Now we can train the model with the training set. Note even after removing nzv columns, the data is still huge, so it may take a while for result to converge. Here I am only training the model for 3500 interations. You can vary the interations, learning rate and regularization strength and plot the learning curve for optimal fitting.
+```{r}
+nnet.mnist <- nnet(X.proc, Y, step_size = 0.3, reg = 0.0001, niteration = 3500)
+predicted_class <- nnetPred(X.proc, nnet.mnist)
+print(paste('training set accuracy:',mean(predicted_class == (y+1))))
+predicted_class <- nnetPred(Xcv.proc, nnet.mnist)
+print(paste('CV accuracy:',mean(predicted_class == (ycv+1))))
+```
+
+***prediction of a random image***
+```{r}
+Xtest <- Xcv[sample(1:nrow(Xcv), 1), ]
+Xtest.proc <- as.matrix(Xtest[-nzv.nolabel], nrow = 1)
+predicted_test <- nnetPred(t(Xtest.proc), nnet.mnist)
+print(paste('The predicted digit is:',predicted_test-1 ))
+displayDigit(Xtest)
+```
+
+accuracy can be improved by using better implementations from neural net and H2o, neural network etc.. packages
+
+
+
+### Using ***neuralnet*** package
+
+neural net package uses resilient backpropagatiion algorithm as opposed to normal backpropagation. difference can be observed in the code stub below
+### Psedo code for resilient back propagation as opposed to normal backpropagation
 ```{r}
 # for all weights{
 # if (grad.old*grad>0){
@@ -73,8 +290,7 @@ Boosted neural Networks : boosting is efficient with weak learners and hence too
 # }
 ```
 
-
-**training options**
+**training options** when using ***neuralnet*** package
 except for formula and data everything has default values 
 1. ***formula***
 in the form of y~x1+x2+...+xn
