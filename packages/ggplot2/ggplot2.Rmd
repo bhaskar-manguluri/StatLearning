@@ -1,0 +1,17 @@
+---
+title: "ggplot2"
+author: "bhaskar"
+date: "8 March 2017"
+output: html_document
+---
+
+Individual building blocks which can be combined to form any graphic
+
+1. data
+2. aesthetic mapping
+3. geometric object
+4. statistical transformation
+5. scales
+6. coordinate system
+7.posion adjustments
+8.facets

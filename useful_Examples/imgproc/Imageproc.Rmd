@@ -1,0 +1,275 @@
+---
+title: "ImageProc"
+author: "bhaskar"
+output: html_document
+---
+
+How to convert matrix of values into greyscale image in R ?
+
+```{r}
+ vec<-as.vector(rnorm(1:924))
+heatmap(matrix(vec,33,28),Rowv=NA,Colv=NA,col=paste("gray",1:99,sep=""))
+image(matrix(vec,33,28),col = paste("gray",1:99,sep=""),Rowv = NA,Colv=NA)
+# different way to use full range of grays
+grays = rgb(red = 0:255/255, blue = 0:255/255, green = 0:255/255)
+heatmap(matrix(rnorm(100), 10, 10),Rowv=NA,Colv=NA,col=grays, scale = "none")
+```
+
+using package ***X*** for basic processing
+
+```{r}
+#Install package
+
+#source("http://bioconductor.org/biocLite.R")
+
+#biocLite()
+
+#biocLite("EBImage")
+# Load the librray to current R session
+
+library("EBImage")
+
+# Read image file
+
+Image=readImage("amyjackson.jpg")
+
+display(Image)
+
+# display command open the image in web-browser.
+
+
+# get details of image file like pixel value, colormode etc
+
+print(Image)
+
+
+# Adjust brightness
+
+Image1=Image+0.4
+
+Image2=Image-0.4
+
+display(Image1)
+
+display(Image2)
+
+#to write image file
+
+writeImage(Image1, "Image1.jpg")
+
+ 
+
+#Adjusting Contrast
+
+Image3=Image*0.7
+
+Image4=Image*1.5
+
+display(Image3)
+
+display(Image4)
+
+writeImage(Image4, "Image4.jpg")
+
+
+# gamma correction
+
+Image5=Image^2
+
+Image6=Image^0.5
+
+display(Image5)
+
+display(Image6)
+
+print(Image)
+#Cropping
+
+Image7=Image[200:600,100:300,]
+
+display(Image7)
+
+writeImage(Image7, "Image7.jpg")
+
+
+#Spatial Transformation
+?translate
+print(Image7)
+Image8=translate(rotate(Image7,45),c(100,100))
+image9 = translate(rotate(Image7,60),c(100,100))
+display(Image8)
+print(Image8)
+print(image9)
+writeImage(Image8, "Image8.jpg")
+
+ 
+
+#Color Management
+
+## while converting from RGB to gray, three component images result corresponding to R, G and B respectively.
+?colormode
+x = Image(rnorm(300*300*3),dim=c(300,300,3), colormode='Color')
+display(x)
+colorMode(Image)
+colorMode(Image)=Grayscale
+print(Image)
+
+display(Image)
+
+writeImage(Image, "Image_gray.jpg")
+
+ 
+
+#revert the color change
+
+colorMode(Image)=Color
+display(Image)
+#Combine Images .... here combining images means having several frames in one image. no of frames
+
+# being equal to number of images being combined.
+print(Image8)
+# Imagecomb=combine( Image9, Image8)
+# 
+# display(Imagecomb)
+
+# Morph Image....
+
+## Image morph can only be done for binary image.
+
+## A binary image is the one which have only two pixel value, 0 for background and 1 for object.
+
+Image9=readImage("binaryimage.png")
+
+
+print(Image9)
+?makeBrush
+kern=makeBrush(5, shape='diamond')
+
+Imageerode=erode(Image9, kern)
+
+Imagedilat=dilate(Image9, kern)
+
+
+display(Imageerode)
+
+display(Imagedilat)
+
+writeImage(Imageerode, "Imageerode.jpg")
+
+
+writeImage(Imagedilat, "Imagedilat.jpg")
+
+
+#Segmentation
+
+## for a binary image, segmentation counts no of objects.
+
+Imagelabel=bwlabel(Image9)
+
+cat('Number of objects=', max(Imagelabel),'\n')
+
+##output of above line, 'Number of objects=3081'
+
+# Filteration
+
+## low pass filter
+
+## low pass filter can remove noise or blur images
+
+flow=makeBrush(19, shape='diamond', step=FALSE)^2
+
+flow=flow/sum(flow)
+
+imageflow=filter2(Image, flow)
+
+display(imageflow)
+
+## High pass filter
+
+## high pass filter can detact edges or make images sharper.
+
+fhi=matrix(1, nc=3, nr=3)
+
+fhi[2,2]=-8
+
+imagefhi=filter2(Image, fhi)
+
+display(imagefhi)
+
+writeImage(imagefhi,'highpassfilterImage.jpg')
+
+```
+
+package *** imager*** is another alternative useful package to explore, as of now still undecided on which package to use.
+
+KMeans clustering on image
+```{r}
+library(jpeg)
+#GET IMAGE
+#url <- "http://www.wall321.com/thumbnails/detail/20120304/colorful%20birds%20tropical%20head%203888x2558%20wallpaper_www.wall321.com_40.jpg"
+
+# Download the file and save it as "Image.jpg" in the directory
+#dFile <- download.file(url, "Image.jpg")
+img <- readJPEG("kmeansImage.jpg") # 
+imgDm <- dim(img)
+#CLEAN
+# Assign RGB channels to data frame
+imgRGB <- data.frame(
+  x = rep(1:imgDm[2], each = imgDm[1]),
+  y = rep(imgDm[1]:1, imgDm[2]),
+  R = as.vector(img[,,1]),
+  G = as.vector(img[,,2]),
+  B = as.vector(img[,,3])
+)
+#PLOTTING
+library(ggplot2)
+
+# ggplot theme to be used
+plotTheme <- function() {
+  theme(
+    panel.background = element_rect(
+      size = 3,
+      colour = "black",
+      fill = "white"),
+    axis.ticks = element_line(
+      size = 2),
+    panel.grid.major = element_line(
+      colour = "gray80",
+      linetype = "dotted"),
+    panel.grid.minor = element_line(
+      colour = "gray90",
+      linetype = "dashed"),
+    axis.title.x = element_text(
+      size = rel(1.2),
+      face = "bold"),
+    axis.title.y = element_text(
+      size = rel(1.2),
+      face = "bold"),
+    plot.title = element_text(
+      size = 20,
+      face = "bold",
+      vjust = 1.5)
+  )
+}
+
+# Plot the image
+ggplot(data = imgRGB, aes(x = x, y = y)) + 
+  geom_point(colour = rgb(imgRGB[c("R", "G", "B")])) +
+  labs(title = "Original Image: Colorful Bird") +
+  xlab("x") +
+  ylab("y") +
+plotTheme()
+#CLUSTERING
+kClusters <- 3
+kMeans <- kmeans(imgRGB[, c("R", "G", "B")], centers = kClusters)
+kColours <- rgb(kMeans$centers[kMeans$cluster,])
+#PLOT KMEANS
+ggplot(data = imgRGB, aes(x = x, y = y)) + 
+  geom_point(colour = kColours) +
+  labs(title = paste("k-Means Clustering of", kClusters, "Colours")) +
+  xlab("x") +
+  ylab("y") + 
+plotTheme()
+```
+
+

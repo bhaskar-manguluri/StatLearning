@@ -1,0 +1,126 @@
+---
+title: "dplyr"
+author: "bhaskar"
+output: html_document
+---
+
+```{r}
+suppressMessages(library(dplyr))
+library(hflights)
+data(hflights)
+head(hflights)
+```
+
+**tbl_df creates "local data frame"**
+```{r}
+flights = tbl_df(hflights)
+flights
+# specify number of rows
+print(flights,n = 20)
+# convert to a normal data frame to see all the columns
+data.frame(head(flights))
+```
+
+## filter: Keep rows of matching criteria
+
+for all dplyr verbs first argument and return type is data frame
+```{r}
+filter(flights,Month==1,DayofMonth==1)
+filter(flights,UniqueCarrier=="AA"|UniqueCarrier == "AS")
+filter(flights,UniqueCarrier %in% c("AA","AS"))
+```
+
+## select: pick columns by name
+
+```{r}
+select(flights,DepTime,ArrTime,FlightNum)
+# use colons for multiple continous columns ans use contains to match
+# starts_with, ends_with and regEx + matches can be used for matching
+select(flights,Year:DayofMonth,contains("Taxi"),contains("Delay"))
+select(flights,Year:DayofMonth,contains("Taxi"),contains("delay"))
+```
+
+**Chaining or pipelining is done using %>% operator**
+```{r}
+flights %>% select(UniqueCarrier,DepDelay) %>% filter(DepDelay>60)
+x1 = 1:5; x2 = 2:6 ; 
+sqrt(sum((x1-x2)^2))
+(x1-x2)^2 %>% sum() %>% sqrt()
+# flights %>% select(flights,UniqueCarrier,DepDelay) %>%  filter(flights,DepDelay>60)
+```
+
+## arrange: reorder Rows
+```{r}
+flights %>% select(UniqueCarrier,DepDelay) %>% arrange(DepDelay)
+flights %>% select(UniqueCarrier,DepDelay) %>% arrange(desc(DepDelay))
+```
+
+## mutate : Add new variables
+```{r}
+flights = flights %>% mutate(Speed = Distance/AirTime*60)
+```
+## summarise : Reduce variables to values
+primarily useful with the data that has been grouped by one or more variables
+group_by creates the group that will be operated
+summarise uses the provided aggregation
+```{r}
+flights %>% group_by(Dest) %>% summarise(avg_delay = mean(ArrDelay,na.rm = T))
+```
+**summarise_each** allows to apply same summary function to multiple columns at once
+```{r}
+flights %>% group_by(UniqueCarrier) %>% summarise_each(funs(mean),Cancelled,Diverted)
+flights %>%  group_by(UniqueCarrier) %>% summarise_each(funs(min(.,na.rm=T),max(.,na.rm=t)),matches("Delay"))
+```
+**n() and n_distinct()**
+```{r}
+flights %>% group_by(Month,DayofMonth) %>% summarise(flight_count = n_distinct(Dest)) %>% arrange(desc(flight_count))
+flights %>% group_by(Month,DayofMonth) %>% summarise(flight_count = n()) %>% arrange(desc(flight_count))
+flights %>% group_by(Dest) %>% summarise(flights = n(),distinct = n_distinct(TailNum))
+```
+**tally()** function
+```{r}
+flights %>% group_by(Month,DayofMonth) %>% tally(sort = T)
+```
+
+*sometimes grouping is useful without summarising*
+```{r}
+flights%>%group_by(Dest)%>%select(Cancelled)%>%table()%>%head()
+```
+
+### Window functions
+Five main types of windows functions, 3 useful for R
+1. Ranking functions like *row_number(),min_rank(),dense_rank(),cume_dist(),percent_rank()
+2. Offset functions lead and lag
+3. variation of aggregate functions like cumsum(),cummin(),cummax(),cumall(),cummany()
+the other two types fixed width aggregation and recycled aggregation are less useful.
+```{r}
+# for each carrier calculate the two days of the year they had their longest departure delays
+flights %>% group_by(UniqueCarrier) %>% select(DepDelay,DayofMonth,Month) %>% filter(min_rank(desc(DepDelay))<=2) %>% arrange(DepDelay,UniqueCarrier)
+# top_n() uses filter and min_rank together, variable used for ordering is by default the last column
+flights %>% group_by(UniqueCarrier) %>% select(DayofMonth,Month,DepDelay) %>% top_n(2) %>% arrange(desc(DepDelay),UniqueCarrier)
+flights %>% group_by(UniqueCarrier) %>% select(DayofMonth,Month,DepDelay) %>% top_n(2,Month) %>% arrange(desc(DepDelay),UniqueCarrier)
+# for each month, calculate the number of flights and the change from the previous month
+flights %>% group_by(Month) %>% summarise(flights_num = n()) %>% mutate(change=flights_num - lag(flights_num))
+#using tally, remember tally gives count of each group in column 'n'
+flights %>% group_by(Month) %>% tally() %>% mutate(change=n-lag(n))
+```
+
+*other useful functions*
+```{r}
+# randomly sample a fixed number of rows, without replacement
+flights %>% sample_n(5)
+ #randomly sample a fraction of rows, with replacement
+flights %>% sample_frac(0.25, replace=TRUE)
+head(flights)
+glimpse(flights)
+inner_join(flights,flights)
+# semi_join90, anti_join(),
+```
+
+## tidyr functions
+```{r}
+library(tidyr)
+flights %>% select(UniqueCarrier,TailNum)%>%mutate(TailLink=paste(TailNum,sample(1:4,n(),replace = T))) %>% separate(TailLink,c("a","b")) %>% head()
+```
+seperate() X unite to seperate or unite multiple columns based on splitting single columns
+gather() aX spread() to make wide data longer or viceversa
