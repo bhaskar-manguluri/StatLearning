@@ -1,0 +1,105 @@
+---
+title: "EDA_dplyr_ggplot2"
+author: "bhaskar"
+output: html_document
+---
+Found this good example at http://varianceexplained.org/r/tidy-genomics/.
+
+Gene Expression :
+
+DNA = master list of all genes
+
+cell can control which gene is transcribed into RNA, based on certain conditions. if a gene is not transcribed into RNA in any condition it might as well not be there at all.
+
+mibrobes then use the RNA to form protein, which is the final product
+
+A gene expression micro array can be used to know how much each gene is expressed in a pirticular condition. this can be used to know 
+
+1. the overall cell activity
+2. the function of specific gene(based on on and off)
+
+Brauer 2008 used this micro array to study effect of starvation and growth rate on yeast, Basically if we give yeast plenty of nutrients(rich media) except that you restrict in supply of one nutrient, we can cantrol the growth rate to desired level(this is done using chemostat)
+eg: limit supply of glucose or luecine( essential amino acids) or ammonium
+
+Starving yeast nutrients let us find 
+1. **Genes that lower their activity on response to growth rate**
+Growth rate dependent expression patterns can tel us a lot about cell cycle control, and how these cell respond to stress
+2. **Respond differently when different nutrients are being limited**
+These genes may be involved in transport or metabolism of those nutrients
+
+```{r}
+library(readr)
+library(tidyr)
+library(dplyr)
+original_data = read.delim("http://varianceexplained.org/files/Brauer2008_DataSet1.tds", sep = "\t")
+dim(original_data)
+# View(original_data) cannot be knit to html
+original_data %>% select(NAME) %>% head()
+```
+here we see that name variable is a combination of many variables sepearated by ||. Having info in this way makes it difficult for functions like merging with another table of same genes etc.(info should be atomic level in RDBMS), the five columns might be Name,Biological process,molecular function,Id1,Id2
+```{r}
+#original_data %>% separate(NAME,c('Name','BP','MF','id1','id2'),sep = "||") %>% head()
+# || is reserved keyword hence use \\|\\| for it
+#original_data %>% separate(NAME,c('Name','BP','MF','id1','id2'),sep = "\\|\\|") %>% head()
+#original_data %>% separate(NAME,c('Name','BP','MF','id1','id2'),sep = "\\|\\|") %>% select(MF) %>% head()
+# new markdown rendering spoiled the actual cleaning process, the output in RMd automatically corrected the trailing white spaces
+# which can be seen when above line is executed in console, we can use dplyr::mutate_each & trimws function to remove WhiteSpace
+#original_data %>% separate(NAME,c('name','BP',"MF","id1",'id2'),sep = "\\|\\|") %>% mutate_each(funs = funs(trimws),name:id2) %>% head()
+# we might as well remove the columns id2,GID,YorF
+cleaned_data = original_data %>% separate(NAME,c('name','BP','MF','id1','id2'),sep="\\|\\|") %>% mutate_each(funs=funs(trimws),name:id2) %>% select(-id2,-YORF,-GID,-GWEIGHT) %>% rename(id = id1)
+cleaned_data %>% head()
+```
+Now if we see columns G0.05 G0.1 => limited nutrient is Glucose, and growth rate is 0.5,0.1 respectively. and each value is expression level
+
+```{r}
+cleaned_data = cleaned_data %>% gather(key = sample,value = expression,G0.05:U0.3) %>% separate(col=sample,into=c('nutrient','growth_rate'),sep=1,convert = T)
+cleaned_data %>% head()
+```
+Now the data is per gene per nutrient per sample as oppossed to original per gene data. This type of per gene is common in genomics report and this procedue of tidying is commonly performed before analysis
+
+1. How gene expression of single gene, LEU1 changes with growth rate and limiting nutrient?
+```{r}
+library(ggplot2)
+cleaned_data %>% filter(name == "LEU1") %>% ggplot(aes(growth_rate,expression,color=nutrient)) + geom_line()
+```
+we can see that gene is heavily expressed if the controlled nutrient is leucine and as the growth_rate is increased the expression level decrease ( the gene is well known for being involved in leucine synthesis, so if L is controlled cell has to synthesis its own leucine hence LEU1 is heavily expressed and as the growth_rate(which is the amount of leucine in the environment) is increased the cell can focus less on that environment and hence the gene is less expressed)
+
+2. How do different genes involved in Leucine synthesis express with growth_rate and nutrient
+
+```{r}
+#levels(as.factor(cleaned_data$BP)) # these levels may need cleaning but there is only one level for leucine biosynthesis, hence not cleaning
+cleaned_data %>% filter(BP == "leucine biosynthesis") %>% ggplot(aes(growth_rate,expression,color=nutrient)) +geom_line() + facet_wrap(~name)
+```
+Leu1,2,4 expressed high inder leucine starvation and leu9 also expresses high in leucine starvation, but the trend is different. interestingly leu4 is also expressed high in glucose starvation
+
+The trend is not far from linear and lets see with points and linear approximation
+
+```{r}
+cleaned_data %>% filter(BP == "leucine biosynthesis") %>% ggplot(aes(growth_rate,expression,color=nutrient)) + geom_point() + geom_smooth(method = "lm",se = F) + facet_wrap(~name)
+
+```
+
+interesting we can use linear model to approximate the relationship, lets try the same for BP = sulfur metabolism
+
+```{r}
+#cleaned_data %>% filter(BP == "sulfur metabolism") %>% ggplot(aes(growth_rate,expression,color = nutrient)) + geom_point()+geom_smooth(method="lm",se=F)+facet_wrap(~name)
+# some genes has no names, we can include id to check them
+#cleaned_data %>% filter(BP == "sulfur metabolism") %>% ggplot(aes(growth_rate,expression,color = nutrient)) + geom_point()+geom_smooth(method="lm",se=F)+facet_wrap(~name+id)
+# scale is different for each gene, we can use scale="free_y" to use individual sclae in plotting, na values are removed
+cleaned_data %>% filter(BP == "sulfur metabolism") %>% ggplot(aes(growth_rate,expression,color = nutrient)) + geom_point(na.rm = T)+geom_smooth(method="lm",se=F,na.rm = T)+facet_wrap(~name+id,scale="free_y")
+```
+
+```{r}
+makeplot = function(df){
+        p = ggplot(df,aes(growth_rate,expression,color=nutrient))
+        p+geom_point(na.rm=T)+geom_smooth(method="lm",se=F,na.rm=T)+facet_wrap(~name+id,scales="free_y")
+}
+cleaned_data %>% filter(BP=="cell wall organization and biogenesis") %>% makeplot()
+```
+Now there are 36 different plots and it becomes hard to interpret the visualisation
+
+bioconductor packages are useful for genomics
+
+broom package  helps in converting outputs like lm into a data frame so that we can use ggplot.
+
+
