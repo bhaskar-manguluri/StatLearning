@@ -40,6 +40,7 @@ train = sample(c(T,F),nrow(Hitters),replace = T)
 test = !train
 library(leaps)
 regfit.best = regsubsets(Salary~.,data=Hitters[train,],nvmax = 19)
+# note: model.matrix also converts qualitative variables into dummy variables, the coef(regsubsets) also give coefficients of such matrix
 test.mat = model.matrix(Salary~.,data = Hitters[test,])
 #note : regsubsets does not have a predict function, using the below loop
 val.errors = rep(NA,19)
@@ -51,8 +52,7 @@ for(i in 1:19) {
 val.errors
 which.min(val.errors)
 
-# best model with 7 variables using full dataset may contain different coefficients compared to the best model using full train set
-# ISLR used full data set to recompute best 7 variable model, but i disagree
+# we consider the number of features as a hyperparameter, which is weird as we dont consider the names of predictors
 regfit.best = regsubsets(Salary~.,nvmax = 19,data=Hitters)
 coef(regfit.best,id=7)
 regfit.best = lm(Salary~AtBat+Hits+HmRun+CAtBat+CHits+League+PutOuts,data=Hitters) #using best 7 coef by validation method
@@ -103,7 +103,6 @@ cv_bestsubsets = function(trainSet, max_number_of_predictors,response_name,num_o
 #Ridge and lasso
 #using glmnet
 library(glmnet)
-# note: model.matrix also converts qualitative variables into dummy variables
 x = model.matrix(Salary~.,Hitters)[,-1]
 y = Hitters$Salary
 # argument alpha = 0 for ridge regression alpha=1 for lasso
