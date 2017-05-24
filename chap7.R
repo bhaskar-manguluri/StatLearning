@@ -217,6 +217,24 @@ beta2hat
 resid2 = Y-beta2hat*X2
 beta1hat = lm(resid2~X1)$coef[2]
 beta1hat
-
+#e,f,g
+beta1 = rep(NA,1000)
+beta2 = rep(NA,1000)
+beta1[1] = 12
+beta2[1] = 0
+beta0 = rep(NA,1000)
+beta0[1] = 0
+for(i in 1:999){
+        resid1 = Y - beta1[i]*X1
+        beta2[i+1] = lm(resid1~X2)$coef[2]
+        resid2 = Y - beta2[i+1] * X2
+        lm_fit = lm(resid2~X1)
+        beta1[i+1] = lm_fit$coef[2]
+        beta0[i+1] = lm_fit$coef[1]
+}
+plot(beta0,type="l")
+plot(beta1,type="l")
+plot(beta2,type="l")
+#it seems that they attain true value after 1 interval as relation ship is linear and X1 and X2 satisfy linear assumptins
 #12
-# if relationship is linear 1 iteration would suffice
+# same as 11 but with 100 predictors , so we may need a little more number of iterations to converge
