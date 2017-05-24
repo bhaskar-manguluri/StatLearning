@@ -14,113 +14,131 @@ Sales is a continous variable, splitting the variable at 8 to create a new binar
 ```{r}
 library(ISLR)
 library(tree)
-attach(Carseats)
 High = ifelse(Sales<=8,"No","Yes")
 Carseats = data.frame(Carseats,High)
-tree.carseats = tree(High ~ . -Sales,data =Carseats)
-summary(tree.carseats)
+tree_carseats = tree(High ~ . -Sales,data =Carseats)
+summary(tree_carseats)
 ```
-deviance and residual mean deviance
+
 ```{r}
-plot(tree.carseats)
-text(tree.carseats,pretty = 10)
+plot(tree_carseats)
+text(tree_carseats,pretty = 10)
 ```
 
 We can identify ***ShelveLoc*** as the most important indicator of sales
 
 To print the output corresponding to each branch
 ```{r}
-tree.carseats
+tree_carseats
 ```
-Evaluating performance using validation set.
+####Evaluating performance using validation set.
 ```{r}
 set.seed(2)
 train = sample(1:nrow(Carseats),200)
-carseats.test = Carseats[-train,]
-High.test = High[-train]
-tree.carseats = tree(High~.-Sales,Carseats,subset = train)
+carseats_test = Carseats[-train,]
+High_test = High[-train]
+tree_carseats = tree(High~.-Sales,Carseats,subset = train)
 # using type = "class" in predict gives actual class outcomes
-tree.pred = predict(tree.carseats,carseats.test,type = "class")
-table(tree.pred,High.test)
+tree_pred = predict(tree_carseats,carseats_test,type = "class")
+#ModelMetrics::confusionMatrix(actual = High_test,predicted = tree_pred)
+table(High_test,tree_pred)
+ModelMetrics::auc(actual = High_test,predicted = tree_pred)
 ```
+
 Check if a pruned tree performs better
 - using function cv.tree()
 - default of cv.tree() is to use deviance for cross validation and pruning, if FUN=prune.misclass it uses misclassification error rate instead
 - outputs cost complexity, number of terminal nodes, error rate 
+
 ```{r}
 set.seed(3)
-cv.carseats = cv.tree(tree.carseats,FUN = prune.misclass)
-cv.carseats
+cv_carseats = cv.tree(tree_carseats,FUN = prune.misclass)
+cv_carseats
 ```
 we see that the best model has size 9, cost complexity parameter 1.75 and cv.error 50
 
 plot error as a function of size and as a function of cost complexity parameter
 ```{r}
-par(mfrow=c(1,2))
-plot(cv.carseats$size,cv.carseats$dev,type="b",main="Error ~ terminal nodes(size)")
-plot(cv.carseats$k,cv.carseats$dev,type="b",main="Error ~ penalty")
-par(mfrow=c(1,1))
+dataF = data.frame(no_of_terminal_nodes = cv_carseats$size,error = cv_carseats$dev,cost = cv_carseats$k)
+ggplot(aes(no_of_terminal_nodes,error),data = dataF)+geom_line()
+ggplot(aes(cost,error),data = dataF)+geom_line()
+#plot(cv.carseats$size,cv.carseats$dev,type="b",main="Error ~ terminal nodes(size)")
+#plot(cv.carseats$k,cv.carseats$dev,type="b",main="Error ~ penalty")
+#par(mfrow=c(1,1))
 ```
 we can use ***prune.miscalass*** function for cost complexity pruning
 ```{r}
-tree.pruuned.carseats =  prune.misclass(tree.carseats,best=9)
-plot(tree.pruuned.carseats,Carseats)
-text(tree.pruuned.carseats,pretty = 0)
+pruned_tree_carseats =  prune.misclass(tree_carseats,best=9)
+plot(pruned_tree_carseats,Carseats)
+text(pruned_tree_carseats,pretty = 0)
 ```
 checking performance on test set
 ```{r}
-yhat = predict(tree.pruuned.carseats,newdata = carseats.test,type="class")
-table(yhat,High.test)
+yhat = predict(pruned_tree_carseats,newdata = carseats_test,type="class")
+table(yhat,High_test)
+ModelMetrics::auc(actual = High_test,predicted = yhat)
 ```
-77% classified correctly
+auc impproved from 0.70 to 0.77 
 
-check test set performance on some other model, it will perform less better
+check test set performance with different number of terminal nodes, it should not perform as good as cv selected size.
+
 ```{r}
-tree.pruuned.carseats = prune.misclass(tree.carseats,best = 15)
-yhat = predict(tree.pruuned.carseats,newdata = carseats.test,type="class")
-table(yhat,High.test)
+pruned_tree_carseats = prune.misclass(tree_carseats,best = 15)
+yhat = predict(pruned_tree_carseats,newdata = carseats_test,type="class")
+table(yhat,High_test)
+ModelMetrics::auc(actual = High_test,predicted = yhat)
 ```
-74% of obseravations classified correctly
+auc is 0.73 now, where as best cv is 0.77
 
 ### Regression trees
+
 ```{r}
 library(MASS)#for boston data
 set.seed(1)
 ?Boston
 train = sample(1:nrow(Boston),nrow(Boston)/2)
-tree.boston = tree(medv~.,data = Boston,subset = train)
-summary(tree.boston)
+tree_boston = tree(medv~.,data = Boston,subset = train)
+summary(tree_boston)
+
 ```
 In case of regression the deviance is sum of residual squares.
 ```{r}
-plot(tree.boston,Boston)
-text(tree.boston,pretty = T)
+plot(tree_boston,Boston[train,])
+text(tree_boston,pretty = T)
 ```
 Using ***cv.tree*** to see if pruning makes it better
+
 ```{r}
-cv.boston = cv.tree(tree.boston)
-plot(cv.boston$size,cv.boston$dev,main="Error ~ Size",type="b")
+cv_boston = cv.tree(tree_boston)
+plot(cv_boston$size,cv_boston$dev,main="Error ~ Size",type="b")
+points(cv_boston$size[which.min(cv_boston$dev)],cv_boston$dev[which.min(cv_boston$dev)],col="red",pch=20)
+which.min(cv_boston$dev)
 ```
 
-Most complicated selected as best model by cross validation, in such cases ***prune.true()*** can be used for pruning
+Most complicated selected as best model by cross validation, in such cases ***prune.true()*** can be used for pruning anyway
 ```{r}
-tree.boston.prune = prune.tree(tree.boston,best = 5)
-plot(tree.boston.prune,Boston)
-text(tree.boston.prune,pretty = 0)
+pruned_tree_boston = prune.tree(tree_boston,best = 5)
+plot(pruned_tree_boston,Boston[train,])
+text(pruned_tree_boston,pretty = 0)
 ```
 
 Checking the performance of best model from cross validation
 ```{r}
-yhat = predict(tree.boston,newdata = Boston[-train,])
-Boston.test = Boston[-train,"medv"]
-plot(yhat,Boston.test)
+yhat = predict(tree_boston,newdata = Boston[-train,])
+Boston_test = Boston[-train,"medv"]
+plot(yhat,Boston_test)
 abline(a = 10,b = 1)
-mean((yhat - Boston.test)^2)
-sqrt(mean((yhat - Boston.test)^2))
+mean((yhat - Boston_test)^2)
+print(paste("error with unpruned",sqrt(mean((yhat - Boston_test)^2))),sep=" ")
+# cv pruned performance
+yhat = predict(pruned_tree_boston,newdata = Boston[-train,])
+mean((yhat - Boston_test)^2)
+print(paste("error with pruned",sqrt(mean((yhat - Boston_test)^2))),sep=" ")
 ```
-That implies true value is around 5005$ of predicted value of medv
+That implies true value is around 5005$ of predicted value of medv with unpruned , and the accuracy of unpruned which is the best model is better than the pruned simpler tree
 
 ### Bagging and random forest
+
 Using ***randomForest package***
 
 **Bagging**
@@ -128,34 +146,38 @@ Using ***randomForest package***
 library(randomForest)
 dim(Boston)
 set.seed(1)
-bag.boston = randomForest(medv~.,data=Boston,mtry=13,subset = train,importance=T)
-bag.boston
-yhat = predict(bag.boston,newdata = Boston[-train,])
-plot(yhat,Boston.test)
+bag_boston = randomForest(medv~.,data=Boston,mtry=13,subset = train,importance=T,ntree=500)
+bag_boston
+yhat = predict(bag_boston,newdata = Boston[-train,])
+plot(yhat,Boston_test)
 abline(0,1)
-sqrt(mean((yhat - Boston.test)^2))
+sqrt(mean((yhat - Boston_test)^2))
 ```
-thruth around 3658$ of predicted
-Default ntree of randomForest is with ntree= 500
+thruth around 3670$ of predicted
+
+Default ntree of randomForest is with ntree= 500, check how is the accuracy of bagging with small number of trees
+
 ```{r}
-bag.boston = randomForest(medv~.,data=Boston,mtry=13,subset = train,importance=T,ntree =25)
-bag.boston
-yhat = predict(bag.boston,newdata = Boston[-train,])
-plot(yhat,Boston.test)
+bag_boston = randomForest(medv~.,data=Boston,mtry=13,subset = train,importance=T,ntree =25)
+bag_boston
+yhat = predict(bag_boston,newdata = Boston[-train,])
+plot(yhat,Boston_test)
 abline(0,1)
-sqrt(mean((yhat - Boston.test)^2))
+sqrt(mean((yhat - Boston_test)^2))
 ```
+not surprising that ntree =25 performed not as good as ntree=500
 
 **RandomForest**
 - Fit using mtry less than total, default of regression n/3 and srqt(n) for classification 
 ```{r}
-rf.boston = randomForest(medv~.,data = Boston,importance=T,mtry=6,subset=train,ntree=1000)
-yhat = predict(rf.boston,newdata = Boston[-train,])
-plot(yhat,Boston.test)
+rf_boston = randomForest(medv~.,data = Boston,importance=T,mtry=6,subset=train,ntree=500)
+yhat = predict(rf_boston,newdata = Boston[-train,])
+plot(yhat,Boston_test)
 abline(0,1)
-sqrt(mean((yhat - Boston.test)^2))
+sqrt(mean((yhat - Boston_test)^2))
 ```
-around 3396$
+around 3356$ of original, which is an improvement over bagging with same number of trees
+
 ```{r}
 importance(rf.boston)
 ```
@@ -164,31 +186,32 @@ Two measures of variable importance are reported
 - based on node purity, training RSS for regression and deviance for classifications as default
 
 ### Boosting
+
 Using ***gbm() package*** 
 ```{r}
 library(gbm)
-gbm.boston = gbm(medv~.,data = Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4)
+gbm_boston = gbm(medv~.,data = Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4)
 ```
 note that we used distribution = gaussian
 ```{r}
-yhat = predict(gbm.boston,newdata = Boston[-train,],n.trees = 5000)
-plot(yhat,Boston.test)
+yhat = predict(gbm_boston,newdata = Boston[-train,],n.trees = 5000)
+plot(yhat,Boston_test)
 abline(0,1)
-sqrt(mean(yhat - Boston.test)^2)
+sqrt(mean(yhat - Boston_test)^2)
 ```
 
 default shrinkage parameter is 0.001
 
 ```{r}
-gbm.boston = gbm(medv~.,data = Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4,shrinkage = 0.2)
-yhat = predict(gbm.boston,newdata = Boston[-train,],n.trees = 5000)
+gbm_boston = gbm(medv~.,data = Boston[train,],distribution = "gaussian",n.trees = 5000,interaction.depth = 4,shrinkage = 0.2)
+yhat = predict(gbm_boston,newdata = Boston[-train,],n.trees = 5000)
 gbm.boston
-plot(yhat,Boston.test)
+plot(yhat,Boston_test)
 abline(0,1)
-sqrt(mean(yhat - Boston.test)^2)
+sqrt(mean(yhat - Boston_test)^2)
 ```
-shrinkage 0.2 is better than 0.001 for this data
-shriinkage can be decided through cv
+shrinkage 0.2 is better than 0.001 for this data, and note that this result is even better than RF
+shriinkage can be decided through CV
 
 **partial importance plots
 ```{r}
