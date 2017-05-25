@@ -22,10 +22,11 @@ depending on the application, scaling can be True or false
 ```{r}
 plot(svmfit,data = dat)
 ```
-identities of support vectors can be diplayed by **index** column in the output
+indices of support vectors can be diplayed by **index** column in the output
 ```{r}
 svmfit$index
 summary(svmfit)
+dat[svmfit$index,]
 ```
 *cost* is a tuning parameter for the svm(), ususally decided through *crossvalidation*
 svm for above data using smaller cost
@@ -36,13 +37,14 @@ svmfit1$index
 summary(svmfit1)
 ```
 
-SVM neuther outputs the coefficients of linear boundary or the width of the margin, cross validation is done using the tune() of e1071 library
+SVM neither outputs the coefficients of linear boundary nor the width of the margin, cross validation is done using the tune() of e1071 library
 ```{r}
 set.seed(1)
-tune.out = tune(svm,y~.,data = dat,kernel="linear",ranges = list(cost=c(0.001,0.01,0.1,1.5,10,100)))
-summary(tune.out)
+tune_output = tune(svm,y~.,data = dat,kernel="linear",ranges = list(cost=c(0.001,0.01,0.1,1.5,10,100,1000,1000)))
+summary(tune_output)
 #best model summary stored in best model column of the output
-summary(tune.out$best.model)
+summary(tune_output$best.model)
+plot(tune_output$best.model,data=dat)
 ```
 check performance on a test set
 ```{r}
@@ -50,22 +52,40 @@ set.seed(10)
 xtest = matrix(rnorm(20*2),ncol = 2)
 ytest = rep(c(-1,1),c(10,10))
 xtest[ytest==1,] = xtest[ytest==1,]+1
-test.data = data.frame(x=xtest,y=as.factor(ytest))
-yhat.predict = predict(tune.out$best.model,test.data)
-table(yhat.predict,test.data$y)
+test_data = data.frame(x=xtest,y=as.factor(ytest))
+yhat_predict = predict(tune_output$best.model,test_data)
+table(actual=test_data$y,predicted = yhat_predict)
 ```
-one observation is miscassified, what if classes can have a clear linear boundary
+4 observation's are miscassified
+checking the performance of svmfit with cost =10 as it is almost similar to tune.ot best model, but with lower cost
 ```{r}
-x[y==1,] = x[y==1]+0.5
+yhat_predict = predict(svmfit,test_data)
+table(actual=test_data$y,predicted = yhat_predict)
+```
+This performed slightly betteron this pirticular test set
+
+What if our train set has clear boundary
+
+```{r}
+x[y==1,] = x[y==1]+0.5    #  increase the gap
 plot(x,col=3-y,pch=19)
 dat = data.frame(x = x, y= as.factor(y))
-svm.fit2 = svm(y~.,data = dat,cost = 100,scale = F)
-table(predict(svm.fit2,test.data),test.data$y)
-tune.out = tune(svm,y~.,data = dat,kernel="linear",ranges = list(cost=c(0.001,0.01,0.1,1,5,10,100,1000,10000)))
-summary(tune.out)
-yhat.predict = predict(tune.out$best.model,test.data)
-table(yhat.predict,test.data$y)
+svm_fit2 = svm(y~.,data = dat,cost = 100,scale = F)
+table(predict(svm_fit2,test_data),test_data$y)
+tune_output = tune(svm,y~.,data = dat,kernel="linear",ranges = list(cost=c(0.001,0.01,0.1,1,5,10,100,1000,10000)))
+summary(tune_output)
+yhat = predict(tune_output$best.model,test_data)
+table(yhat,test_data$y)
 ```
+How will this perform on a clearly seperable test set
+```{r}
+xtest[ytest==1,] = xtest[ytest==1]+2    #  increase the gap
+plot(xtest,col=3-ytest,pch=19)
+test_data = data.frame(x=xtest,y=as.factor(ytest))
+yhat = predict(svm_fit2,newdata = test_data)
+table(actual=test_data$y,predicted=yhat)
+```
+
 svm with kernel="polynomial"/"radial" is non linear
 ```{r}
 set.seed(10)
@@ -77,14 +97,14 @@ plot(x,col=3-y,pch=19)
 dat = data.frame(x = x,y=as.factor(y))
 set.seed(10)
 train = sample(200,100)
-svm.fit = svm(y~.,kernel="radial",cost =0.5,gamma= 3,scale = F,data = dat[train,])
-plot(svm.fit,data=dat[train,])
-table(predict(svm.fit,newdata = dat[-train,]),dat[-train,]$y)
+svm_radial = svm(y~.,kernel="radial",cost =0.5,gamma= 3,scale = F,data = dat[train,])
+plot(svm_radial,data=dat[train,])
+table(predict(svm_radial,newdata = dat[-train,]),dat[-train,]$y)
 #tune for gamma and cost
-tune.out = tune(svm,y~.,data = dat[train,],kernel="radial",ranges = list(cost=c(0.01,0.1,1,10,100,1000),gamma=c(0.5,1,2,3,4)))
-summary(tune.out)
-plot(tune.out$best.model,data = dat[train,])
-table(predict=predict(tune.out$best.model,newdata = dat[-train,]),true=dat[-train,]$y)
+tune_output = tune(svm,y~.,data = dat[train,],kernel="radial",ranges = list(cost=c(0.01,0.1,1,10,100,1000),gamma=c(0.5,1,2,3,4)))
+summary(tune_output)
+plot(tune_output$best.model,data = dat[train,])
+table(predict=predict(tune_output$best.model,newdata = dat[-train,]),actual=dat[-train,]$y)
 ```
 **ROC plots**
 
@@ -92,7 +112,7 @@ table(predict=predict(tune.out$best.model,newdata = dat[-train,]),true=dat[-trai
 library(ROCR)
 rocplot = function(pred,thruth,...){
         predob = prediction(pred,thruth)
-        perf = performance(prediction.obj = predob,measure = "tpr",x.measure = "fpr")
+        perf = performance(predob,"tpr","fpr")
         plot(perf,...)
 }
 ```
@@ -102,6 +122,7 @@ svmfit = svm(y~., data = dat[train,],kernel="radial",gamma=2,cost=1,decision.val
 yhat = predict(svmfit,newdata=dat[train,],decision.values= T)
 fitted = attributes(yhat)$decision.values
 rocplot(fitted,dat[train,"y"],main="ROC on Train data")
+ModelMetrics::auc(actual = dat[train,"y"],predicted = fitted)
 ```
 ***svm*** produces better flexible fit with higher value of gamma
 ```{r}
@@ -109,12 +130,14 @@ svmfit = svm(y~., data = dat[train,],kernel="radial",gamma=50,cost=1,decision.va
 yhat = predict(svmfit,newdata=dat[train,],decision.values= T)
 fitted = attributes(yhat)$decision.values
 rocplot(fitted,dat[train,"y"],main="ROC on Train data")
+ModelMetrics::auc(actual = dat[train,"y"],predicted = fitted)
 ```
 But ***ROC curve performs better with gamma =2 for test data
 ```{r}
 yhat = predict(svmfit,newdata=dat[-train,],decision.values= T)
 fitted = attributes(yhat)$decision.values
 rocplot(fitted,dat[-train,"y"],main="ROC on Train data")
+ModelMetrics::auc(actual = dat[train,"y"],predicted = fitted)
 ```
 
 **SVM for multiple classes**
@@ -125,10 +148,13 @@ x= rbind(x,matrix(rnorm(50*2),ncol=2))
 y = c(y,rep(0,50))
 x[y %in% c(0,2)]=x[y %in% c(0,2)]+2
 dat = data.frame(x,as.factor(y))
-svm.fit2 = svm(y~.,data = dat,kernel="radial",gamma=1,cost=1)
-summary(svm.fit)
-plot(svm.fit2,dat)
+svm_fit_multiclass = svm(y~.,data = dat,kernel="radial",gamma=1,cost=1)
+summary(svm_fit_multiclass)
 ```
+```{r}
+plot(svm_fit_multiclass,dat)
+```
+
 
 ### Application to gene expression data
 
